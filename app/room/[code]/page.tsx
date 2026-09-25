@@ -67,7 +67,15 @@ export default async function RoomPage({
   return (
     <RoomClient
       key={room.id}
-      room={{ id: room.id, code: room.code, name: room.name }}
+      room={{
+        id: room.id,
+        code: room.code,
+        name: room.name,
+        autoplay: room.autoplay ?? true,
+        listenedSeconds: Number(room.listened_seconds ?? 0),
+        theme: room.theme ?? null,
+        scheduled: room.scheduled ?? null,
+      }}
       me={{ id: user.id, name: profile.display_name, username: profile.username ?? null }}
       openInvite={invite === "1" && members.length < 2}
       features={{ v2: schemaVersion >= 2 }}

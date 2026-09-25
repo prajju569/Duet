@@ -18,6 +18,10 @@ import { QuickLoginSetup } from "@/components/QuickLoginSetup";
 import { RenameSheet } from "@/components/RoomsList";
 import { useEmojiBurst } from "./EmojiBurst";
 import { DedicateSheet } from "./DedicateSheet";
+import type { RoomSong } from "./LibraryPanel";
+import { sortQueue } from "@/lib/lyrics";
+
+export type ScheduledSong = { at: string; track: Track; by: string; label?: string };
 import type { Features } from "@/lib/features";
 
 type ConnectionView = "ok" | "offline" | "reconnecting" | "restored";
@@ -114,7 +118,15 @@ function ConnectionBanner({ view }: { view: ConnectionView }) {
 }
 
 type Props = {
-  room: { id: string; code: string; name: string };
+  room: {
+    id: string;
+    code: string;
+    name: string;
+    autoplay?: boolean;
+    listenedSeconds?: number;
+    theme?: string | null;
+    scheduled?: ScheduledSong | null;
+  };
   me: { id: string; name: string; username: string | null };
   initialMembers: Member[];
   /** Open the invite sheet right away (just created the room). */
@@ -148,7 +160,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   messagesRef.current = messages;
   const [hasOlder, setHasOlder] = useState(initial.hasOlder);
   const [reactions, setReactions] = useState<Record<string, Reaction>>(() => reactionMap(initial.reactions)); // key: message_id:user_id
-  const [queue, setQueue] = useState<QueueItem[]>(initial.queue);
+  const [queue, setQueue] = useState<QueueItem[]>(() => sortQueue(initial.queue));
+  const [ourSongs, setOurSongs] = useState<RoomSong[]>([]);
+  const [autoplay, setAutoplay] = useState(room.autoplay ?? true);
   const [favourites, setFavourites] = useState<Favourite[]>(initial.favourites);
   const [presence, setPresence] = useState<Record<string, PresenceInfo>>({});
   const [partnerTyping, setPartnerTyping] = useState(false);
@@ -301,7 +315,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       .eq("room_id", room.id)
       .eq("status", "queued")
       .order("created_at");
-    setQueue((data ?? []) as QueueItem[]);
+    setQueue(sortQueue((data ?? []) as QueueItem[]));
   }, [supabase, room.id]);
 
   const loadMembers = useCallback(async () => {
@@ -411,9 +425,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           if (!q?.id) return;
           setQueue((prev) => {
             const rest = prev.filter((x) => x.id !== q.id);
-            return q.status === "queued"
-              ? [...rest, q].sort((a, b) => a.created_at.localeCompare(b.created_at))
-              : rest;
+            return q.status === "queued" ? sortQueue([...rest, q]) : rest;
           });
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "room_members", filter }, ({ eventType, new: row }) => {
@@ -451,14 +463,81 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     };
   }, [supabase, room.id, me.id, me.name, loadMessages, loadMessagesSince, loadQueue, loadMembers, channelKey]);
 
+  // ── Music extras (v2) ──────────────────────────────────────────────
+  const loadOurSongs = useCallback(async () => {
+    if (!features.v2) return;
+    const { data } = await supabase.from("room_songs").select("*").eq("room_id", room.id).order("created_at", { ascending: false });
+    setOurSongs((data ?? []) as RoomSong[]);
+  }, [supabase, room.id, features.v2]);
+
+  useEffect(() => {
+    if (!features.v2) return;
+    void loadOurSongs();
+    const ch = supabase
+      .channel(`songs:${room.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "room_songs", filter: `room_id=eq.${room.id}` }, () => void loadOurSongs())
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [supabase, room.id, features.v2, loadOurSongs]);
+
+  const saveOurSong = useCallback(
+    async (t: Track) => {
+      const { error } = await supabase.from("room_songs").insert({
+        room_id: room.id,
+        video_id: t.videoId,
+        title: t.title,
+        channel: t.channel,
+        thumbnail: t.thumbnail,
+        duration_sec: t.durationSec,
+        added_by: me.id,
+      });
+      if (error && error.code !== "23505") return showToast("Couldn't save that");
+      showToast("Saved to Our Songs 🎶");
+      void loadOurSongs();
+    },
+    [supabase, room.id, me.id, showToast, loadOurSongs],
+  );
+
+  const removeOurSong = useCallback(
+    async (id: string) => {
+      setOurSongs((prev) => prev.filter((s) => s.id !== id));
+      await supabase.from("room_songs").delete().eq("id", id);
+    },
+    [supabase],
+  );
+
+  const reorderQueue = useCallback(
+    async (ids: string[]) => {
+      setQueue((prev) => ids.map((id, i) => ({ ...prev.find((q) => q.id === id)!, position: i + 1 })).filter((q) => q.id));
+      const { error } = await supabase.rpc("reorder_queue", { p_room: room.id, p_ids: ids });
+      if (error) {
+        showToast("Couldn't reorder");
+        void loadQueue();
+      }
+    },
+    [supabase, room.id, showToast, loadQueue],
+  );
+
+  const changeAutoplay = useCallback(
+    async (on: boolean) => {
+      setAutoplay(on);
+      const { error } = await supabase.rpc("update_room_settings", { p_room: room.id, p_settings: { autoplay: on } });
+      if (error) setAutoplay(!on);
+    },
+    [supabase, room.id],
+  );
+
   // Room renamed elsewhere (e.g. from the home screen). Its own channel, so if the rooms
   // table isn't enabled for Realtime yet, chat and sync are unaffected.
   useEffect(() => {
     const ch = supabase
       .channel(`roomname:${room.id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${room.id}` }, ({ new: row }) => {
-        const n = (row as { name?: string }).name;
-        if (n) setRoomName(n);
+        const r = row as { name?: string; autoplay?: boolean };
+        if (r.name) setRoomName(r.name);
+        if (typeof r.autoplay === "boolean") setAutoplay(r.autoplay);
       })
       .subscribe();
     return () => {
@@ -721,6 +800,13 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         <div className="lg:hidden">{topBar}</div>
         <PlayerPanel
           roomName={roomName}
+          roomId={room.id}
+          ourSongs={ourSongs}
+          onSaveOurSong={features.v2 ? saveOurSong : undefined}
+          onRemoveOurSong={removeOurSong}
+          onReorder={reorderQueue}
+          autoplay={autoplay}
+          onAutoplay={changeAutoplay}
           v2={features.v2}
           onShareMoment={shareMoment}
           onDedicate={partner ? setDedicating : undefined}

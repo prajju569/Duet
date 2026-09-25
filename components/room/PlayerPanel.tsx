@@ -20,13 +20,21 @@ import {
 import { SeekBar } from "./SeekBar";
 import { QueueList } from "./QueueList";
 import { SearchPanel } from "./SearchPanel";
-import { FavouritesList } from "./FavouritesList";
+import { LibraryPanel, type RoomSong } from "./LibraryPanel";
+import { LyricsPanel } from "./LyricsPanel";
 
 type Player = ReturnType<typeof usePlaybackSync>;
 
 type Props = {
   roomName: string;
+  roomId: string;
   v2?: boolean;
+  ourSongs: RoomSong[];
+  onSaveOurSong?: (t: Track) => void;
+  onRemoveOurSong: (id: string) => void;
+  onReorder?: (ids: string[]) => void;
+  autoplay?: boolean;
+  onAutoplay?: (on: boolean) => void;
   onShareMoment?: () => void;
   onDedicate?: (t: Track) => void;
   player: Player;
@@ -41,7 +49,7 @@ type Props = {
   onError: (msg: string) => void;
 };
 
-type Tab = "queue" | "search" | "favourites";
+type Tab = "queue" | "search" | "library" | "lyrics";
 
 function useIsDesktop() {
   const [desktop, setDesktop] = useState(false);
@@ -190,15 +198,32 @@ export function PlayerPanel(props: Props) {
         {expanded && (
           <div className="mt-4">
             <SeekBar getPosition={player.getPosition} duration={s?.durationSec ?? null} isPlaying={!!s?.isPlaying} disabled={!s?.videoId} onSeek={player.seek} />
+            <div className="mt-3 flex items-center justify-center gap-8">
+              <button onClick={() => player.seek(0)} disabled={!s?.videoId} className="rounded-full p-3 text-cream/80 transition active:scale-90 disabled:opacity-30" aria-label="Restart">
+                <RestartIcon size={24} />
+              </button>
+              {playPause(68)}
+              <button onClick={player.skip} disabled={!s?.videoId} className="rounded-full p-3 text-cream/80 transition active:scale-90 disabled:opacity-30" aria-label="Skip">
+                <SkipIcon size={24} />
+              </button>
+            </div>
             <VolumeRow volume={player.volume} onChange={player.setVolume} />
             {props.v2 && current && (
-              <div className="mt-3 flex justify-center gap-2">
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
                 <button
                   onClick={props.onShareMoment}
                   className="rounded-full bg-white/8 px-3.5 py-1.5 text-[13px] font-medium text-cream/85 ring-1 ring-white/10 active:scale-95"
                 >
                   💬 Share this moment
                 </button>
+                {props.onSaveOurSong && !props.ourSongs.some((o) => o.video_id === current.videoId) && (
+                  <button
+                    onClick={() => props.onSaveOurSong!(current)}
+                    className="rounded-full bg-white/8 px-3.5 py-1.5 text-[13px] font-medium text-cream/85 ring-1 ring-white/10 active:scale-95"
+                  >
+                    🎶 Save to Our Songs
+                  </button>
+                )}
                 {props.onDedicate && (
                   <button
                     onClick={() => props.onDedicate!(current)}
@@ -209,15 +234,6 @@ export function PlayerPanel(props: Props) {
                 )}
               </div>
             )}
-            <div className="mt-3 flex items-center justify-center gap-8">
-              <button onClick={() => player.seek(0)} disabled={!s?.videoId} className="rounded-full p-3 text-cream/80 transition active:scale-90 disabled:opacity-30" aria-label="Restart">
-                <RestartIcon size={24} />
-              </button>
-              {playPause(68)}
-              <button onClick={player.skip} disabled={!s?.videoId} className="rounded-full p-3 text-cream/80 transition active:scale-90 disabled:opacity-30" aria-label="Skip">
-                <SkipIcon size={24} />
-              </button>
-            </div>
           </div>
         )}
       </div>
@@ -233,7 +249,8 @@ export function PlayerPanel(props: Props) {
               [
                 ["queue", "Up next", <QueueIcon key="q" size={15} />, queue.length],
                 ["search", "Search", <SearchIcon key="s" size={15} />, 0],
-                ["favourites", "Favourites", <HeartIcon key="f" size={15} />, favourites.length],
+                ["library", "Library", <HeartIcon key="f" size={15} />, 0],
+                ["lyrics", "Lyrics", <span key="l" className="text-[13px] leading-none">🎤</span>, 0],
               ] as const
             ).map(([id, label, icon, count]) => (
               <button
@@ -257,6 +274,9 @@ export function PlayerPanel(props: Props) {
                 onPlay={(id) => player.playQueueItem(id)}
                 onRemove={props.onRemoveFromQueue}
                 onSearch={() => setTab("search")}
+                onReorder={props.v2 ? props.onReorder : undefined}
+                autoplay={props.autoplay}
+                onAutoplay={props.v2 ? props.onAutoplay : undefined}
               />
             )}
             {tab === "search" && (
@@ -269,9 +289,20 @@ export function PlayerPanel(props: Props) {
                 onError={props.onError}
               />
             )}
-            {tab === "favourites" && (
-              <FavouritesList favourites={favourites} onPlay={(t) => player.playTrack(t)} onQueue={props.onAddToQueue} onToggleFavourite={onToggleFavourite} />
+            {tab === "library" && (
+              <LibraryPanel
+                roomId={props.roomId}
+                v2={!!props.v2}
+                favourites={favourites}
+                ourSongs={props.ourSongs}
+                nameOf={nameOf}
+                onPlay={(t, by) => player.playTrack(t, by ?? undefined)}
+                onQueue={props.onAddToQueue}
+                onToggleFavourite={onToggleFavourite}
+                onRemoveOurSong={props.onRemoveOurSong}
+              />
             )}
+            {tab === "lyrics" && <LyricsPanel state={s} getPosition={player.getPosition} />}
           </div>
         </div>
       )}

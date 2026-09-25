@@ -58,6 +58,7 @@ export type QueueItem = {
   duration_sec: number | null;
   added_by: string | null;
   status: "queued" | "played" | "removed";
+  position?: number | null;
   created_at: string;
 };
 
