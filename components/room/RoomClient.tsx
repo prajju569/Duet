@@ -13,6 +13,8 @@ import { PlayerPanel } from "./PlayerPanel";
 import { ChatPanel } from "./ChatPanel";
 import { TopBar } from "./TopBar";
 import { JoinOverlay } from "./JoinOverlay";
+import { InviteSheet } from "./InviteSheet";
+import { QuickLoginSetup } from "@/components/QuickLoginSetup";
 
 /**
  * iOS keeps the page height when the keyboard opens and scrolls the whole page up,
@@ -134,8 +136,10 @@ function ConnectionBanner({ view }: { view: ConnectionView }) {
 
 type Props = {
   room: { id: string; code: string; name: string };
-  me: { id: string; name: string };
+  me: { id: string; name: string; username: string | null };
   initialMembers: Member[];
+  /** Open the invite sheet right away (just created the room). */
+  openInvite?: boolean;
   /** Server-rendered first screen, so the room opens already filled in. */
   initial: {
     messages: Message[];
@@ -152,7 +156,7 @@ const reactionMap = (rows: Reaction[]) =>
 
 const PAGE = 60;
 
-export function RoomClient({ room, me, initialMembers, initial }: Props) {
+export function RoomClient({ room, me, initialMembers, initial, openInvite = false }: Props) {
   const supabase = getSupabase();
   const roomChannelRef = useRef<RealtimeChannel | null>(null);
   const teardownRef = useRef<Promise<void>>(Promise.resolve());
@@ -170,6 +174,10 @@ export function RoomClient({ room, me, initialMembers, initial }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const [connected, setConnected] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(openInvite);
+  const [username, setUsername] = useState(me.username);
+  const [pinSheet, setPinSheet] = useState(false);
+  const [pinNudgeDismissed, setPinNudgeDismissed] = useState(false);
   const [channelKey, setChannelKey] = useState(0); // bump to tear down & rebuild realtime channels
   const connection = useConnectionStatus(connected, () => setChannelKey((k) => k + 1));
   const [joinTick, setJoinTick] = useState(0); // bumps on every (re)join of the room channel
@@ -355,7 +363,9 @@ export function RoomClient({ room, me, initialMembers, initial }: Props) {
       // Postgres Changes: chat, reactions, queue, read receipts, playback (backup path).
       const filter = `room_id=eq.${room.id}`;
       dbChannel = supabase
-        .channel(`db:${room.id}`)
+        // wait: only report SUBSCRIBED once the database listener is really live, so the
+        // catch-up fetch below can't race a change that lands in between.
+        .channel(`db:${room.id}`, { config: { postgres_changes_options: { wait: true } } })
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter }, ({ new: row }) => {
           const m = row as Message;
           setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev.map((x) => (x.id === m.id ? m : x)) : [...prev, m]));
@@ -565,6 +575,7 @@ export function RoomClient({ room, me, initialMembers, initial }: Props) {
       me={me}
       partner={partner}
       presence={presence}
+      onInvite={() => setInviteOpen(true)}
     />
   );
 
@@ -598,6 +609,24 @@ export function RoomClient({ room, me, initialMembers, initial }: Props) {
           onTyping={sendTyping}
           onReact={react}
           onSeen={markRead}
+          notice={
+            // People who joined by invite can't log in elsewhere until they pick a PIN.
+            !username && !pinNudgeDismissed && player.unlocked ? (
+              <div className="animate-rise mb-2 flex items-center gap-3 rounded-2xl bg-zinc-900/90 p-2.5 pl-3.5 ring-1 ring-white/10 backdrop-blur">
+                <span className="text-lg">🔐</span>
+                <div className="min-w-0 flex-1 text-sm leading-snug">
+                  <b>Save your login</b>
+                  <span className="text-cream/60"> — pick a PIN to open Duet on any phone.</span>
+                </div>
+                <button onClick={() => setPinSheet(true)} className="shrink-0 rounded-full bg-cream px-3 py-1.5 text-sm font-semibold text-ink">
+                  Set PIN
+                </button>
+                <button onClick={() => setPinNudgeDismissed(true)} aria-label="Later" className="shrink-0 p-1 text-cream/50">
+                  ✕
+                </button>
+              </div>
+            ) : null
+          }
         />
       </div>
 
@@ -612,6 +641,25 @@ export function RoomClient({ room, me, initialMembers, initial }: Props) {
       )}
 
       <ConnectionBanner view={connection} />
+
+      {inviteOpen && !partner && <InviteSheet roomId={room.id} myName={me.name} onClose={() => setInviteOpen(false)} />}
+
+      {pinSheet && (
+        <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/60 px-3 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-sm sm:items-center" onClick={() => setPinSheet(false)}>
+          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <QuickLoginSetup
+              suggested={me.name.toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 20)}
+              existingUsername={null}
+              onDone={(u) => {
+                setUsername(u);
+                setPinSheet(false);
+                showToast(`Saved — log in anywhere as ${u} + your PIN`);
+              }}
+              onSkip={() => setPinSheet(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4">

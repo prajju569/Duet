@@ -7,8 +7,15 @@ import type { PlaybackRow } from "@/lib/sync";
 
 const PAGE_SIZE = 60;
 
-export default async function RoomPage({ params }: { params: Promise<{ code: string }> }) {
+export default async function RoomPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ code: string }>;
+  searchParams: Promise<{ invite?: string }>;
+}) {
   const { code: rawCode } = await params;
+  const { invite } = await searchParams;
   const code = rawCode.toUpperCase();
 
   // Start warming up YouTube while we talk to the database.
@@ -21,7 +28,7 @@ export default async function RoomPage({ params }: { params: Promise<{ code: str
 
   // Profile + join in parallel. join_room is a no-op if you're already in.
   const [{ data: profile }, { data: room, error }] = await Promise.all([
-    supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("display_name, username").eq("id", user.id).maybeSingle(),
     supabase.rpc("join_room", { p_code: code }),
   ]);
   if (!profile?.display_name) redirect(`/?next=${encodeURIComponent(`/room/${code}`)}`);
@@ -58,7 +65,8 @@ export default async function RoomPage({ params }: { params: Promise<{ code: str
     <RoomClient
       key={room.id}
       room={{ id: room.id, code: room.code, name: room.name }}
-      me={{ id: user.id, name: profile.display_name }}
+      me={{ id: user.id, name: profile.display_name, username: profile.username ?? null }}
+      openInvite={invite === "1" && members.length < 2}
       initialMembers={members}
       initial={{
         messages,

@@ -28,6 +28,8 @@ You'll create three free accounts: **Supabase** (database and login), **Google C
    - **Project URL**, which looks like `https://abcd1234.supabase.co`
    - **anon public** key (it may be called the **publishable** key), a long string
 
+> **Invite links:** run `supabase/migrations/20260928000000_invites.sql`, and make sure Vercel has `SUPABASE_SERVICE_ROLE_KEY` (the Supabase integration adds it).
+>
 > **Username + PIN login:** also run `supabase/migrations/20260927000000_pin_login.sql`, and add a `PIN_PEPPER` env var in Vercel (any 32+ random characters) before anyone creates a PIN.
 >
 > **Already set up before replies existed?** Run `supabase/migrations/20260926000000_message_replies.sql` in the SQL Editor once. It's safe to run twice.
@@ -86,8 +88,8 @@ By default, a login link only works in the same browser that asked for it. On ph
 
 1. Open your site on your phone and enter your email. Tap the link in the email, or type the 6-digit code.
 2. Enter your first name. It's shown on your picks.
-3. Tap **Create a new room**, then tap **Invite** at the top right to send the link on WhatsApp.
-4. They open the link, sign in and land in the same room.
+3. Tap **Create a new room** — type their name and tap **Share on WhatsApp**.
+4. They tap the link, tap **Join**, and they're in your room — no email, no sign-up. (They can pick a username + PIN later to log in on other phones.)
 5. Each of you taps **Tap to join the music** once. Browsers need one tap before they're allowed to play sound.
 6. Tap the mini player to open it, go to **Search**, find a song and tap it. It plays for both of you. 🎶
 

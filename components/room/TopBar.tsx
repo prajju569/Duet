@@ -13,6 +13,8 @@ type Props = {
   me: { id: string; name: string };
   partner: Member | null;
   presence: Record<string, PresenceInfo>;
+  /** Opens the "type their name" invite sheet (only while the second seat is empty). */
+  onInvite: () => void;
 };
 
 function Person({ userId, name, presence, isMe }: { userId: string; name: string; presence?: PresenceInfo; isMe?: boolean }) {
@@ -32,10 +34,11 @@ function Person({ userId, name, presence, isMe }: { userId: string; name: string
   );
 }
 
-export function TopBar({ roomName, code, me, partner, presence }: Props) {
+export function TopBar({ roomName, code, me, partner, presence, onInvite }: Props) {
   const [copied, setCopied] = useState(false);
 
   async function invite() {
+    if (!partner) return onInvite();
     const url = `${window.location.origin}/room/${code}`;
     const text = `Come listen with me on Duet 🎧 ${url}`;
     try {

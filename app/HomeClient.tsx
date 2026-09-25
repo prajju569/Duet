@@ -59,7 +59,7 @@ export function HomeClient({
     const { data, error } = await supabase.rpc("create_room", { p_name: "Our room" });
     setBusy(false);
     if (error || !data) return setMsg(error?.message ?? "Couldn't create a room");
-    router.push(`/room/${(data as Room).code}`);
+    router.push(`/room/${(data as Room).code}?invite=1`);
   }
 
   function join(e: React.FormEvent) {

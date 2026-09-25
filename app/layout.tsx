@@ -5,7 +5,12 @@ import "./globals.css";
 const display = Fraunces({ subsets: ["latin"], style: ["normal", "italic"], variable: "--font-display-face" });
 const body = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-body" });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Duet",
   description: "A room for two — chat and listen to the same song, in sync.",
   appleWebApp: { capable: true, title: "Duet", statusBarStyle: "black-translucent" },

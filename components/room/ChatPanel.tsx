@@ -25,6 +25,8 @@ type Props = {
   onTyping: (typing: boolean) => void;
   onReact: (messageId: string, emoji: string) => void;
   onSeen: () => void;
+  /** Optional card shown just above the message box. */
+  notice?: React.ReactNode;
 };
 
 export function ChatPanel(props: Props) {
@@ -222,6 +224,7 @@ export function ChatPanel(props: Props) {
       )}
 
       <div className="px-3 pt-1 pb-[max(env(safe-area-inset-bottom),12px)] lg:px-6 lg:pb-5">
+        {props.notice}
         {replyTo && (
           <div className="animate-rise mb-2 flex items-center gap-3 rounded-2xl bg-white/7 py-2 pr-2 pl-3 ring-1 ring-white/10">
             <div className="min-w-0 flex-1 border-l-2 border-rose-300 pl-2.5">
