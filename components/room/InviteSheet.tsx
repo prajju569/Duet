@@ -39,7 +39,7 @@ export function InviteSheet({ roomId, myName, onClose }: { roomId: string; myNam
   }
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center" onClick={onClose}>
+    <div className="vv-fixed z-[55] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center" onClick={onClose}>
       <div
         className="animate-rise w-full max-w-md rounded-t-[2rem] bg-[#1d1419] p-6 pb-[max(env(safe-area-inset-bottom),24px)] ring-1 ring-white/10 sm:rounded-[2rem]"
         onClick={(e) => e.stopPropagation()}

@@ -26,7 +26,7 @@ export function JoinOverlay({ ready, state, partnerName, partnerListening, onJoi
       : "Your room is ready";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 px-6 backdrop-blur-xl">
+    <div className="vv-fixed z-50 flex items-center justify-center bg-ink/70 px-6 backdrop-blur-xl">
       <div className="animate-rise flex w-full max-w-sm flex-col items-center text-center">
         <div className="relative mb-7">
           <div className="absolute -inset-6 rounded-full bg-[var(--c1)] opacity-60 blur-3xl" />

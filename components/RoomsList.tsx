@@ -140,7 +140,7 @@ export function RenameSheet({
   error: string | null;
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center" onClick={onClose}>
+    <div className="vv-fixed z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center" onClick={onClose}>
       <form
         onSubmit={onSubmit}
         onClick={(e) => e.stopPropagation()}

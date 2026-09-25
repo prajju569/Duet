@@ -17,31 +17,6 @@ import { InviteSheet } from "./InviteSheet";
 import { QuickLoginSetup } from "@/components/QuickLoginSetup";
 import { RenameSheet } from "@/components/RoomsList";
 
-/**
- * iOS keeps the page height when the keyboard opens and scrolls the whole page up,
- * pushing the mini player off-screen. Pin the app to the *visible* area instead so
- * the player stays on top and the composer sits right above the keyboard.
- */
-function useVisualViewportHeight() {
-  const [h, setH] = useState<number | null>(null);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      setH(Math.round(vv.height));
-      if (window.scrollY !== 0) window.scrollTo(0, 0);
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
-  return h;
-}
-
 type ConnectionView = "ok" | "offline" | "reconnecting" | "restored";
 
 /**
@@ -208,7 +183,6 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     void roomChannelRef.current?.send({ type: "broadcast", event: "playback", payload: s });
   }, []);
 
-  const appHeight = useVisualViewportHeight();
   const player = usePlaybackSync({
     roomId: room.id,
     meId: me.id,
@@ -609,7 +583,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   );
 
   return (
-    <div className="duet-bg fixed inset-x-0 top-0 h-dvh overflow-hidden overscroll-none text-cream" style={{ ...style, ...(appHeight ? { height: appHeight } : {}) }} data-playing={player.state?.isPlaying ? "" : undefined}>
+    <div className="duet-bg vv-fixed overflow-hidden overscroll-none text-cream" style={style} data-playing={player.state?.isPlaying ? "" : undefined}>
       <div className="relative z-10 flex h-full flex-col lg:flex-row">
         <div className="lg:hidden">{topBar}</div>
         <PlayerPanel
@@ -698,7 +672,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       {inviteOpen && !partner && <InviteSheet roomId={room.id} myName={me.name} onClose={() => setInviteOpen(false)} />}
 
       {pinSheet && (
-        <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/60 px-3 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-sm sm:items-center" onClick={() => setPinSheet(false)}>
+        <div className="vv-fixed z-[55] flex items-end justify-center bg-black/60 px-3 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-sm sm:items-center" onClick={() => setPinSheet(false)}>
           <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <QuickLoginSetup
               suggested={me.name.toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 20)}

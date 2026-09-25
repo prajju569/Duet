@@ -93,7 +93,7 @@ export function PlayerPanel(props: Props) {
     <section
       className={
         expanded
-          ? "fixed inset-0 z-40 flex flex-col overflow-y-auto overscroll-contain bg-ink/95 backdrop-blur-2xl lg:static lg:z-auto lg:h-full lg:w-[min(46%,620px)] lg:shrink-0 lg:border-r lg:border-white/5 lg:bg-black/15 lg:backdrop-blur-none"
+          ? "vv-fixed z-40 flex flex-col overflow-y-auto overscroll-contain bg-ink/95 backdrop-blur-2xl lg:static lg:z-auto lg:h-full lg:w-[min(46%,620px)] lg:shrink-0 lg:border-r lg:border-white/5 lg:bg-black/15 lg:backdrop-blur-none"
           : "sticky top-0 z-30 mx-3 mb-1 flex flex-col overflow-hidden rounded-2xl bg-black/35 ring-1 ring-white/10 backdrop-blur-xl"
       }
     >

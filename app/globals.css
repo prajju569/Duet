@@ -18,6 +18,15 @@
   }
 }
 
+/* A full-screen layer that fits the part of the screen *above* the phone keyboard. */
+@utility vv-fixed {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--vvt, 0px);
+  height: var(--vvh, 100dvh);
+}
+
 /* Animatable colour stops so the background glides between songs. */
 @property --c1 { syntax: "<color>"; inherits: true; initial-value: hsl(345 55% 28%); }
 @property --c2 { syntax: "<color>"; inherits: true; initial-value: hsl(20 60% 24%); }
