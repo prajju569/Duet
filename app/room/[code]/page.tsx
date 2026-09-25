@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { preconnect } from "react-dom";
 import { createClient } from "@/lib/supabase/server";
 import { getMyProfile } from "@/lib/profile";
+import { getSchemaVersion } from "@/lib/features";
 import { RoomClient } from "@/components/room/RoomClient";
 import type { Favourite, Member, Message, QueueItem, Reaction } from "@/lib/types";
 import type { PlaybackRow } from "@/lib/sync";
@@ -39,12 +40,13 @@ export default async function RoomPage({
   }
 
   // Everything the room needs, fetched at once so the page arrives already filled in.
-  const [{ data: rows }, { data: latest }, { data: queue }, { data: playback }, { data: favourites }] = await Promise.all([
+  const [{ data: rows }, { data: latest }, { data: queue }, { data: playback }, { data: favourites }, schemaVersion] = await Promise.all([
     supabase.from("room_members").select("user_id, last_read_at").eq("room_id", room.id),
     supabase.from("messages").select("*").eq("room_id", room.id).order("created_at", { ascending: false }).limit(PAGE_SIZE),
     supabase.from("queue_items").select("*").eq("room_id", room.id).eq("status", "queued").order("created_at"),
     supabase.from("playback_state").select("*").eq("room_id", room.id).maybeSingle(),
     supabase.from("favourites").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+    getSchemaVersion(supabase),
   ]);
 
   const messages = ((latest ?? []) as Message[]).reverse();
@@ -68,6 +70,7 @@ export default async function RoomPage({
       room={{ id: room.id, code: room.code, name: room.name }}
       me={{ id: user.id, name: profile.display_name, username: profile.username ?? null }}
       openInvite={invite === "1" && members.length < 2}
+      features={{ v2: schemaVersion >= 2 }}
       initialMembers={members}
       initial={{
         messages,

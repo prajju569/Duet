@@ -187,6 +187,7 @@ export function PlayerPanel(props: Props) {
         {expanded && (
           <div className="mt-4">
             <SeekBar getPosition={player.getPosition} duration={s?.durationSec ?? null} isPlaying={!!s?.isPlaying} disabled={!s?.videoId} onSeek={player.seek} />
+            <VolumeRow volume={player.volume} onChange={player.setVolume} />
             <div className="mt-3 flex items-center justify-center gap-8">
               <button onClick={() => player.seek(0)} disabled={!s?.videoId} className="rounded-full p-3 text-cream/80 transition active:scale-90 disabled:opacity-30" aria-label="Restart">
                 <RestartIcon size={24} />
@@ -265,6 +266,33 @@ function MiniProgress({ getPosition, duration }: { getPosition: () => number; du
   return (
     <div className="h-[3px] w-full bg-white/10">
       <div className="h-full bg-cream/80 transition-[width] duration-500 ease-linear" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+/** Your own volume (not synced). iPhones only allow the side buttons, so it's hidden there. */
+function VolumeRow({ volume, onChange }: { volume: number; onChange: (v: number) => void }) {
+  const [ios, setIos] = useState(true);
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    setIos(/iPhone|iPad|iPod/.test(ua) || (ua.includes("Mac") && "ontouchend" in document));
+  }, []);
+  if (ios) return null;
+  return (
+    <div className="mt-2 flex items-center gap-3 px-1 text-cream/55">
+      <span className="text-sm" aria-hidden>
+        {volume === 0 ? "🔇" : volume < 50 ? "🔉" : "🔊"}
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={volume}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label="Volume (just for you)"
+        className="duet-range flex-1"
+        style={{ "--pct": `${volume}%` } as React.CSSProperties}
+      />
     </div>
   );
 }

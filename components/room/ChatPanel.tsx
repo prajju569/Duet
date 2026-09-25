@@ -4,6 +4,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Member, Message, Reaction } from "@/lib/types";
 import { clockTime, dayLabel, firstName } from "@/lib/format";
 import { parseTimestamp } from "@/lib/sync";
+import { BURST_EMOJIS } from "./EmojiBurst";
 import { ChevronDown, ClockIcon, CheckIcon, DoubleCheckIcon, ReplyIcon, SendIcon, XIcon } from "@/components/ui/Icons";
 
 const EMOJIS = ["❤️", "😂", "🥹", "😮", "🔥", "👍"];
@@ -27,6 +28,8 @@ type Props = {
   onSeen: () => void;
   /** Optional card shown just above the message box. */
   notice?: React.ReactNode;
+  /** Send a floating-emoji burst to both screens. */
+  onBurst: (emoji: string) => void;
 };
 
 export function ChatPanel(props: Props) {
@@ -239,6 +242,7 @@ export function ChatPanel(props: Props) {
           </div>
         )}
         <form onSubmit={submit} className="flex items-end gap-2">
+          <BurstButton onBurst={props.onBurst} />
           <textarea
             ref={inputRef}
             value={text}
@@ -477,6 +481,56 @@ function Bubble({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Tap: ❤️ burst on both screens. Long-press: pick another emoji. */
+function BurstButton({ onBurst }: { onBurst: (emoji: string) => void }) {
+  const [tray, setTray] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+  return (
+    <div className="relative shrink-0">
+      {tray && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setTray(false)} />
+          <div className="animate-pop absolute bottom-13 left-0 z-40 flex gap-1 rounded-full bg-zinc-900/95 p-1.5 shadow-xl ring-1 ring-white/10">
+            {BURST_EMOJIS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => onBurst(e)}
+                className="flex size-10 items-center justify-center rounded-full text-2xl transition hover:scale-125 active:scale-90"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <button
+        type="button"
+        aria-label="Send a heart burst (hold for more)"
+        onPointerDown={() => {
+          longPressed.current = false;
+          timer.current = setTimeout(() => {
+            longPressed.current = true;
+            navigator.vibrate?.(10);
+            setTray(true);
+          }, 420);
+        }}
+        onPointerUp={() => timer.current && clearTimeout(timer.current)}
+        onPointerLeave={() => timer.current && clearTimeout(timer.current)}
+        onContextMenu={(e) => e.preventDefault()}
+        onClick={() => {
+          if (longPressed.current) return;
+          onBurst("❤️");
+        }}
+        className="flex size-11 items-center justify-center rounded-full bg-white/8 text-xl ring-1 ring-white/10 transition select-none active:scale-90"
+      >
+        ❤️
+      </button>
     </div>
   );
 }

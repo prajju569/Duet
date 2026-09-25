@@ -56,6 +56,17 @@ export function usePlaybackSync({ roomId, meId, initial = null, broadcast, onErr
   const [unlocked, setUnlocked] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
   const [playerState, setPlayerState] = useState(UNSTARTED);
+  const [volume, setVolumeState] = useState(100);
+  const volumeRef = useRef(100);
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem("duet:volume"));
+      if (v > 0 && v <= 100) {
+        volumeRef.current = v;
+        setVolumeState(v);
+      }
+    } catch {}
+  }, []);
 
   const broadcastRef = useRef(broadcast);
   const onErrorRef = useRef(onError);
@@ -384,7 +395,7 @@ export function usePlaybackSync({ roomId, meId, initial = null, broadcast, onErr
     setUnlocked(true);
     if (!p || !readyRef.current) return;
     p.unMute();
-    p.setVolume(100);
+    p.setVolume(volumeRef.current);
     loadedVideoRef.current = null; // force a fresh load inside this gesture
     apply(shownRef.current);
   }, [apply]);
@@ -395,7 +406,27 @@ export function usePlaybackSync({ roomId, meId, initial = null, broadcast, onErr
   // Stable "listening now": buffering blips during seeks shouldn't flicker presence.
   const listening = unlocked && !!state?.isPlaying && !needsTap && playerState !== PAUSED && playerState !== ENDED;
 
+  /** Your volume only — never synced. */
+  const setVolume = useCallback((v: number) => {
+    const vol = Math.max(0, Math.min(100, Math.round(v)));
+    volumeRef.current = vol;
+    setVolumeState(vol);
+    try {
+      localStorage.setItem("duet:volume", String(vol));
+    } catch {}
+    const p = playerRef.current;
+    if (p && readyRef.current) {
+      if (vol === 0) p.mute();
+      else {
+        p.unMute();
+        p.setVolume(vol);
+      }
+    }
+  }, []);
+
   return {
+    volume,
+    setVolume,
     hostRef,
     state,
     ready,

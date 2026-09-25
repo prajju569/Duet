@@ -16,6 +16,8 @@ import { JoinOverlay } from "./JoinOverlay";
 import { InviteSheet } from "./InviteSheet";
 import { QuickLoginSetup } from "@/components/QuickLoginSetup";
 import { RenameSheet } from "@/components/RoomsList";
+import { useEmojiBurst } from "./EmojiBurst";
+import type { Features } from "@/lib/features";
 
 type ConnectionView = "ok" | "offline" | "reconnecting" | "restored";
 
@@ -116,6 +118,8 @@ type Props = {
   initialMembers: Member[];
   /** Open the invite sheet right away (just created the room). */
   openInvite?: boolean;
+  /** Which database-backed features are available. */
+  features?: Features;
   /** Server-rendered first screen, so the room opens already filled in. */
   initial: {
     messages: Message[];
@@ -132,7 +136,7 @@ const reactionMap = (rows: Reaction[]) =>
 
 const PAGE = 60;
 
-export function RoomClient({ room, me, initialMembers, initial, openInvite = false }: Props) {
+export function RoomClient({ room, me, initialMembers, initial, openInvite = false, features = { v2: false } }: Props) {
   const supabase = getSupabase();
   const roomChannelRef = useRef<RealtimeChannel | null>(null);
   const teardownRef = useRef<Promise<void>>(Promise.resolve());
@@ -182,6 +186,37 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const broadcastPlayback = useCallback((s: PlaybackState) => {
     void roomChannelRef.current?.send({ type: "broadcast", event: "playback", payload: s });
   }, []);
+
+  const burst = useEmojiBurst();
+  const lastBurst = useRef(0);
+  const sendBurst = useCallback(
+    (emoji: string) => {
+      const now = Date.now();
+      if (now - lastBurst.current < 350) return;
+      lastBurst.current = now;
+      burst.fire(emoji);
+      void roomChannelRef.current?.send({ type: "broadcast", event: "burst", payload: { emoji } });
+    },
+    [burst],
+  );
+  const lastNudge = useRef(0);
+  const sendNudge = useCallback(() => {
+    const now = Date.now();
+    if (now - lastNudge.current < 10_000) return showToast("Sent — give it a moment 💭");
+    lastNudge.current = now;
+    void roomChannelRef.current?.send({ type: "broadcast", event: "nudge", payload: { from: me.name } });
+    burst.fire("💭");
+    showToast("💭 Sent");
+    void fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId: room.id, kind: "nudge" }),
+    }).catch(() => {});
+  }, [burst, me.name, room.id, showToast]);
+  const burstRef = useRef(burst.fire);
+  useEffect(() => {
+    burstRef.current = burst.fire;
+  });
 
   const player = usePlaybackSync({
     roomId: room.id,
@@ -315,6 +350,15 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
 
       roomChannel
         .on("broadcast", { event: "playback" }, ({ payload }) => receiveRef.current(payload as PlaybackState))
+        .on("broadcast", { event: "burst" }, ({ payload }) => {
+          if (typeof payload?.emoji === "string") burstRef.current(payload.emoji.slice(0, 8));
+        })
+        .on("broadcast", { event: "nudge" }, ({ payload }) => {
+          navigator.vibrate?.([30, 60, 30]);
+          burstRef.current("💗");
+          setToast(`💭 ${firstName(String(payload?.from ?? "They"))} is thinking of you`);
+          setTimeout(() => setToast(null), 4000);
+        })
         .on("broadcast", { event: "room-renamed" }, ({ payload }) => {
           if (typeof payload?.name === "string") setRoomName(payload.name);
         })
@@ -569,6 +613,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const topBar = (
     <TopBar
       roomName={roomName}
+      onNudge={sendNudge}
       onRename={() => {
         setRenameDraft(roomName);
         setRenameErr(null);
@@ -611,6 +656,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           nameOf={nameOf}
           onSend={sendMessage}
           onTyping={sendTyping}
+          onBurst={sendBurst}
           onReact={react}
           onSeen={markRead}
           notice={
@@ -645,6 +691,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       )}
 
       <ConnectionBanner view={connection} />
+      {burst.layer}
 
       {renameOpen && (
         <RenameSheet

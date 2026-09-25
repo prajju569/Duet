@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { parseYouTubeId } from "@/lib/youtubeUrl";
 import type { Track } from "@/lib/types";
 import { HeartIcon, PlusIcon, SearchIcon } from "@/components/ui/Icons";
 import { IconButton, TrackRow } from "./TrackRow";
@@ -26,12 +27,17 @@ export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, o
   // Search on submit (not per keystroke) — each YouTube search costs quota.
   async function search(e: React.FormEvent) {
     e.preventDefault();
-    const query = q.trim();
+    await runSearch(q.trim());
+  }
+
+  async function runSearch(query: string) {
     if (!query) return;
     setLoading(true);
     inputRef.current?.blur();
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      // A pasted YouTube link → that exact video (costs no search quota).
+      const linkId = parseYouTubeId(query);
+      const res = await fetch(linkId ? `/api/oembed?id=${linkId}` : `/api/search?q=${encodeURIComponent(query)}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Search failed");
       lastQuery = query;
@@ -52,7 +58,15 @@ export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, o
           ref={inputRef}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Kesariya, Arijit, lofi…"
+          onPaste={(e) => {
+            const pasted = e.clipboardData.getData("text");
+            if (parseYouTubeId(pasted)) {
+              e.preventDefault();
+              setQ(pasted.trim());
+              void runSearch(pasted.trim());
+            }
+          }}
+          placeholder="Kesariya, Arijit… or paste a YouTube link"
           enterKeyHint="search"
           className="h-11 min-w-0 flex-1 bg-transparent text-base placeholder:text-cream/35 focus:outline-none"
         />
