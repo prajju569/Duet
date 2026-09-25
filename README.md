@@ -28,6 +28,8 @@ You'll create three free accounts: **Supabase** (database and login), **Google C
    - **Project URL**, which looks like `https://abcd1234.supabase.co`
    - **anon public** key (it may be called the **publishable** key), a long string
 
+> **Duet v2 (stickers, photos, voice notes, lyrics, Our Songs, history, autoplay, themes, scheduled songs, notifications…):** run `supabase/migrations/20260930000000_duet_v2.sql`. Until it's run, those features simply stay hidden. For notifications also add `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` in Vercel (see `.env.example`) and redeploy.
+>
 > **Rooms list + rename:** run `supabase/migrations/20260929000000_rooms_home.sql`.
 >
 > **Invite links:** run `supabase/migrations/20260928000000_invites.sql`, and make sure Vercel has `SUPABASE_SERVICE_ROLE_KEY` (the Supabase integration adds it).
@@ -107,6 +109,16 @@ By default, a login link only works in the same browser that asked for it. On ph
 - **YouTube ads can knock you out of sync briefly.** Ads can play on one phone but not the other. Duet checks every 5 seconds and pulls you back into sync once the ad ends.
 
 ---
+
+## Everything in Duet
+
+**Music** — synced play/pause/seek/skip · shared queue with drag-to-reorder · search or paste a YouTube link · Library: your favourites, *Our Songs* (shared playlist) and *History* (plays + first played) · autoplay from songs you've both played when the queue runs out · synced lyrics (LRCLIB) · your own volume · album-art only, no video.
+
+**Chat** — swipe to reply · long-press to react, ✏️ edit (24 h) or 🗑️ unsend · 😊 stickers · 📷 photos · 🎙️ voice notes (music softens while one plays) · 💬 share a moment ("Kesariya at 1:42" → tap to play from there) · 💌 dedicate a song with a note · typing, seen ticks · ❤️ emoji bursts on both screens.
+
+**Us** — 💭 "thinking of you" nudge · 🎧 listening-together counter with milestones · 🎨 room themes · ⏰ scheduled songs (good night / good morning) · 🔔 push notifications for messages and nudges.
+
+**Good to know:** notifications on iPhone need Duet added to the Home Screen (iOS 16.4+). Scheduled songs start only if Duet is open on at least one phone. Volume is controlled by the side buttons on iPhone.
 
 ## How the sync works (for the curious)
 
