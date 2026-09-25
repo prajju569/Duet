@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase/client";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { QuickLoginSetup } from "@/components/QuickLoginSetup";
 
 type Room = { id: string; code: string; name: string };
 
@@ -16,12 +17,14 @@ const ERRORS: Record<string, string> = {
 export function HomeClient({
   email,
   displayName,
+  username,
   rooms,
   next,
   error,
 }: {
   email: string;
   displayName: string | null;
+  username: string | null;
   rooms: Room[];
   next: string | null;
   error: string | null;
@@ -30,6 +33,8 @@ export function HomeClient({
   const router = useRouter();
   const [name, setName] = useState(displayName ?? "");
   const [editingName, setEditingName] = useState(!displayName);
+  const [myUsername, setMyUsername] = useState(username);
+  const [pinOpen, setPinOpen] = useState(!username);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(error ? (ERRORS[error] ?? error) : null);
@@ -44,7 +49,8 @@ export function HomeClient({
     setBusy(false);
     if (error) return setMsg(error.message);
     setEditingName(false);
-    if (next) router.push(next);
+    // First time: set up username + PIN before heading on (it's skippable).
+    if (next && myUsername) router.push(next);
     else router.refresh();
   }
 
@@ -103,7 +109,33 @@ export function HomeClient({
               <button onClick={() => setEditingName(true)} className="text-cream/40 underline underline-offset-2">
                 change name
               </button>
+              {myUsername && !pinOpen && (
+                <>
+                  {" · "}
+                  <button onClick={() => setPinOpen(true)} className="text-cream/40 underline underline-offset-2">
+                    change PIN
+                  </button>
+                </>
+              )}
             </p>
+            {myUsername && !pinOpen && <p className="mt-1 text-xs text-cream/35">Log in anywhere as <b>{myUsername}</b> + your PIN</p>}
+
+            {pinOpen && (
+              <QuickLoginSetup
+                suggested={(displayName ?? "").toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 20)}
+                existingUsername={myUsername}
+                onDone={(u) => {
+                  setMyUsername(u);
+                  setPinOpen(false);
+                  setMsg(null);
+                  if (next) router.push(next);
+                }}
+                onSkip={() => {
+                  setPinOpen(false);
+                  if (next) router.push(next);
+                }}
+              />
+            )}
 
             {rooms.length > 0 && (
               <div className="mt-10">

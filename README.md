@@ -28,6 +28,8 @@ You'll create three free accounts: **Supabase** (database and login), **Google C
    - **Project URL**, which looks like `https://abcd1234.supabase.co`
    - **anon public** key (it may be called the **publishable** key), a long string
 
+> **Username + PIN login:** also run `supabase/migrations/20260927000000_pin_login.sql`, and add a `PIN_PEPPER` env var in Vercel (any 32+ random characters) before anyone creates a PIN.
+>
 > **Already set up before replies existed?** Run `supabase/migrations/20260926000000_message_replies.sql` in the SQL Editor once. It's safe to run twice.
 
 ### Step 2: Make login emails work on phones (recommended)

@@ -9,7 +9,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: memberships }] = await Promise.all([
-    supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("display_name, username").eq("id", user.id).maybeSingle(),
     supabase.from("room_members").select("room_id, rooms(id, code, name, created_at)").eq("user_id", user.id),
   ]);
 
@@ -25,6 +25,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
     <HomeClient
       email={user.email ?? ""}
       displayName={profile?.display_name ?? null}
+      username={profile?.username ?? null}
       rooms={rooms}
       next={safeNext}
       error={error ?? null}
