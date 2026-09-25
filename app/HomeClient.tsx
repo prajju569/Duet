@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase/client";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 type Room = { id: string; code: string; name: string };
 
@@ -146,6 +147,7 @@ export function HomeClient({
         )}
 
         {msg && <p className="mt-5 text-sm text-rose-300">{msg}</p>}
+        {!editingName && <InstallPrompt />}
         <p className="mt-12 text-center text-xs text-cream/30">Signed in as {email}</p>
       </div>
     </div>

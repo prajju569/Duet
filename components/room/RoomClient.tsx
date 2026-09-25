@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { usePlaybackSync } from "@/hooks/usePlaybackSync";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { DEFAULT_PALETTE, paletteForVideo, type Palette } from "@/lib/colors";
 import { firstName } from "@/lib/format";
 import { fromRow, type PlaybackRow } from "@/lib/sync";
@@ -38,6 +39,99 @@ function useVisualViewportHeight() {
   return h;
 }
 
+type ConnectionView = "ok" | "offline" | "reconnecting" | "restored";
+
+/**
+ * Mobile networks drop constantly. Shows an honest status and, if the realtime
+ * socket stays down while we're visible & online, rebuilds the channels.
+ */
+function useConnectionStatus(connected: boolean, rebuild: () => void): ConnectionView {
+  const [online, setOnline] = useState(true);
+  const [view, setView] = useState<ConnectionView>("ok");
+  const wasDown = useRef(false);
+  const rebuildRef = useRef(rebuild);
+  useEffect(() => {
+    rebuildRef.current = rebuild;
+  });
+
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!online) {
+      wasDown.current = true;
+      setView("offline");
+      return;
+    }
+    if (connected) {
+      if (!wasDown.current) return setView("ok");
+      wasDown.current = false;
+      setView("restored");
+      const t = setTimeout(() => setView("ok"), 1800);
+      return () => clearTimeout(t);
+    }
+    // Disconnected but online: brief grace period (initial connect, quick blips) before showing anything.
+    const show = setTimeout(() => {
+      wasDown.current = true;
+      setView("reconnecting");
+    }, 2500);
+    // Still down after 8s → rebuild channels (the socket may be dead after the phone slept).
+    const kick = setInterval(() => {
+      if (document.visibilityState === "visible") rebuildRef.current();
+    }, 8000);
+    return () => {
+      clearTimeout(show);
+      clearInterval(kick);
+    };
+  }, [online, connected]);
+
+  // Coming back to the app with a dead connection: rebuild right away.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && navigator.onLine && !connected) rebuildRef.current();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onVisible);
+    };
+  }, [connected]);
+
+  return view;
+}
+
+function ConnectionBanner({ view }: { view: ConnectionView }) {
+  if (view === "ok") return null;
+  const styles = {
+    offline: "bg-amber-300 text-ink",
+    reconnecting: "bg-zinc-900/90 text-cream ring-1 ring-white/15",
+    restored: "bg-emerald-300 text-ink",
+  }[view];
+  const text = {
+    offline: "You're offline — messages will fail until you're back",
+    reconnecting: "Reconnecting…",
+    restored: "Back online ✓",
+  }[view];
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(max(env(safe-area-inset-top),8px)+52px)] z-[45] flex justify-center px-4">
+      <div className={`animate-rise flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${styles}`}>
+        {view === "reconnecting" && <span className="size-3 animate-spin rounded-full border-2 border-cream/30 border-t-cream" />}
+        {text}
+      </div>
+    </div>
+  );
+}
+
 type Props = {
   room: { id: string; code: string; name: string };
   me: { id: string; name: string };
@@ -49,6 +143,7 @@ const PAGE = 60;
 export function RoomClient({ room, me, initialMembers }: Props) {
   const supabase = getSupabase();
   const roomChannelRef = useRef<RealtimeChannel | null>(null);
+  const teardownRef = useRef<Promise<void>>(Promise.resolve());
 
   const [members, setMembers] = useState<Member[]>(initialMembers);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -61,6 +156,8 @@ export function RoomClient({ room, me, initialMembers }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const [connected, setConnected] = useState(false);
+  const [channelKey, setChannelKey] = useState(0); // bump to tear down & rebuild realtime channels
+  const connection = useConnectionStatus(connected, () => setChannelKey((k) => k + 1));
   const [joinTick, setJoinTick] = useState(0); // bumps on every (re)join of the room channel
   const trackedRef = useRef<boolean | null>(null);
 
@@ -85,6 +182,7 @@ export function RoomClient({ room, me, initialMembers }: Props) {
 
   const appHeight = useVisualViewportHeight();
   const player = usePlaybackSync({ roomId: room.id, meId: me.id, broadcast: broadcastPlayback, onError: showToast });
+  useWakeLock(player.unlocked && !!player.state?.isPlaying);
 
   // ── Data loading ───────────────────────────────────────────────────
   const loadMessages = useCallback(async () => {
@@ -185,9 +283,13 @@ export function RoomClient({ room, me, initialMembers }: Props) {
     let alive = true;
     let dbChannel: RealtimeChannel | null = null;
     let roomChannel: RealtimeChannel | null = null;
-    let subscribedOnce = false;
+    // After a forced rebuild, the first SUBSCRIBED is a *re*connect → refetch what we missed.
+    let subscribedOnce = channelKey > 0;
 
     (async () => {
+      // supabase.channel() hands back an existing channel with the same topic, so wait
+      // until the previous (re)build has fully left before creating fresh ones.
+      await teardownRef.current;
       await supabase.realtime.setAuth();
       if (!alive) return;
 
@@ -273,10 +375,13 @@ export function RoomClient({ room, me, initialMembers }: Props) {
     return () => {
       alive = false;
       roomChannelRef.current = null;
-      if (roomChannel) void supabase.removeChannel(roomChannel);
-      if (dbChannel) void supabase.removeChannel(dbChannel);
+      setConnected(false);
+      teardownRef.current = Promise.all([
+        roomChannel && supabase.removeChannel(roomChannel),
+        dbChannel && supabase.removeChannel(dbChannel),
+      ]).then(() => undefined);
     };
-  }, [supabase, room.id, me.id, me.name, loadMessages, loadQueue, loadMembers]);
+  }, [supabase, room.id, me.id, me.name, loadMessages, loadQueue, loadMembers, channelKey]);
 
   // Keep presence "listening now" fresh — debounced, since Realtime rate-limits presence updates.
   useEffect(() => {
@@ -434,12 +539,11 @@ export function RoomClient({ room, me, initialMembers }: Props) {
       me={me}
       partner={partner}
       presence={presence}
-      connected={connected}
     />
   );
 
   return (
-    <div className="duet-bg relative h-dvh overflow-hidden text-cream" style={{ ...style, ...(appHeight ? { height: appHeight } : {}) }} data-playing={player.state?.isPlaying ? "" : undefined}>
+    <div className="duet-bg fixed inset-x-0 top-0 h-dvh overflow-hidden overscroll-none text-cream" style={{ ...style, ...(appHeight ? { height: appHeight } : {}) }} data-playing={player.state?.isPlaying ? "" : undefined}>
       <div className="relative z-10 flex h-full flex-col lg:flex-row">
         <div className="lg:hidden">{topBar}</div>
         <PlayerPanel
@@ -480,6 +584,8 @@ export function RoomClient({ room, me, initialMembers }: Props) {
           onJoin={player.unlock}
         />
       )}
+
+      <ConnectionBanner view={connection} />
 
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4">

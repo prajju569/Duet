@@ -54,7 +54,7 @@ export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, o
           onChange={(e) => setQ(e.target.value)}
           placeholder="Kesariya, Arijit, lofi…"
           enterKeyHint="search"
-          className="h-11 min-w-0 flex-1 bg-transparent text-[15px] placeholder:text-cream/35 focus:outline-none"
+          className="h-11 min-w-0 flex-1 bg-transparent text-base placeholder:text-cream/35 focus:outline-none"
         />
         {loading && <span className="size-4 animate-spin rounded-full border-2 border-cream/30 border-t-cream" />}
       </form>

@@ -16,6 +16,9 @@ export const viewport: Viewport = {
   themeColor: "#120c10",
   width: "device-width",
   initialScale: 1,
+  // Stops iOS zooming into inputs / double-tap zoom — the #1 cause of "jumping" layouts.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
 };

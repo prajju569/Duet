@@ -13,7 +13,6 @@ type Props = {
   me: { id: string; name: string };
   partner: Member | null;
   presence: Record<string, PresenceInfo>;
-  connected: boolean;
 };
 
 function Person({ userId, name, presence, isMe }: { userId: string; name: string; presence?: PresenceInfo; isMe?: boolean }) {
@@ -33,7 +32,7 @@ function Person({ userId, name, presence, isMe }: { userId: string; name: string
   );
 }
 
-export function TopBar({ roomName, code, me, partner, presence, connected }: Props) {
+export function TopBar({ roomName, code, me, partner, presence }: Props) {
   const [copied, setCopied] = useState(false);
 
   async function invite() {
@@ -67,7 +66,6 @@ export function TopBar({ roomName, code, me, partner, presence, connected }: Pro
           <Person userId={me.id} name={me.name} presence={presence[me.id]} isMe />
         </div>
       </div>
-      {!connected && <span className="text-[11px] text-amber-200/80">reconnecting…</span>}
       <button
         onClick={invite}
         className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-medium text-cream/85 ring-1 ring-white/10 transition hover:bg-white/15 active:scale-95"

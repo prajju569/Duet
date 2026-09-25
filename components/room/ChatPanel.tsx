@@ -254,7 +254,7 @@ export function ChatPanel(props: Props) {
             }}
             placeholder={partner ? `Message ${firstName(partner.name)}…` : "Message…"}
             enterKeyHint="send"
-            className="max-h-32 min-h-11 flex-1 resize-none rounded-3xl bg-white/8 px-4 py-2.5 text-[15px] leading-6 ring-1 ring-white/10 [field-sizing:content] placeholder:text-cream/35 focus:ring-white/25 focus:outline-none"
+            className="max-h-32 min-h-11 flex-1 resize-none rounded-3xl bg-white/8 px-4 py-2.5 text-base leading-6 ring-1 ring-white/10 [field-sizing:content] placeholder:text-cream/35 focus:ring-white/25 focus:outline-none"
           />
           <button
             type="submit"
