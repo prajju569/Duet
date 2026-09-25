@@ -7,6 +7,8 @@ import { parseTimestamp } from "@/lib/sync";
 import { BURST_EMOJIS } from "./EmojiBurst";
 import { thumbUrl } from "@/lib/youtube";
 import { formatTime } from "@/lib/format";
+import { ImageMessage, VoiceMessage } from "./MediaMessage";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 const STICKERS = ["🥰", "😘", "🤗", "🥺", "😭", "😂", "🤭", "🙈", "😴", "😤", "🫶", "🫂", "💞", "💌", "🌹", "🌙", "☕", "🍫", "🎧", "🎶", "💃", "🕺", "✨", "🔥"];
 
@@ -43,6 +45,9 @@ type Props = {
   onUnsend?: (id: string) => void;
   onSticker?: (emoji: string) => void;
   onPlayFromMessage?: (m: Message) => void;
+  onPhoto?: (file: File) => void;
+  onVoice?: (blob: Blob, seconds: number, mime: string) => void;
+  onError?: (msg: string) => void;
 };
 
 export function ChatPanel(props: Props) {
@@ -55,6 +60,11 @@ export function ChatPanel(props: Props) {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [stickers, setStickers] = useState(false);
+  const [more, setMore] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [canRecord, setCanRecord] = useState(false);
+  useEffect(() => setCanRecord(typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia), []);
   const [atBottom, setAtBottom] = useState(true);
   const [unseenBelow, setUnseenBelow] = useState(0);
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -316,17 +326,70 @@ export function ChatPanel(props: Props) {
             </button>
           </div>
         )}
+        {recording ? (
+          <VoiceRecorder
+            onCancel={() => setRecording(false)}
+            onError={(msg) => props.onError?.(msg)}
+            onDone={(blob, secs, mime) => {
+              setRecording(false);
+              props.onVoice?.(blob, secs, mime);
+            }}
+          />
+        ) : (
         <form onSubmit={submit} className="flex items-end gap-2">
           <BurstButton onBurst={props.onBurst} />
           {props.v2 && (
-            <button
-              type="button"
-              onClick={() => setStickers((v) => !v)}
-              aria-label="Stickers"
-              className={`flex size-11 shrink-0 items-center justify-center rounded-full text-xl ring-1 ring-white/10 transition active:scale-90 ${stickers ? "bg-white/20" : "bg-white/8"}`}
-            >
-              😊
-            </button>
+            <div className="relative shrink-0">
+              {more && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setMore(false)} />
+                  <div className="animate-pop absolute bottom-13 left-0 z-40 w-44 overflow-hidden rounded-2xl bg-zinc-900/95 py-1.5 text-sm shadow-xl ring-1 ring-white/10">
+                    <button
+                      type="button"
+                      aria-label="Stickers"
+                      onClick={() => {
+                        setMore(false);
+                        setStickers((v) => !v);
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                    >
+                      😊 <span>Stickers</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Send a photo"
+                      onClick={() => {
+                        setMore(false);
+                        photoRef.current?.click();
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                    >
+                      📷 <span>Photo</span>
+                    </button>
+                  </div>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setMore((v) => !v)}
+                aria-label="More"
+                className={`flex size-11 items-center justify-center rounded-full text-2xl leading-none ring-1 ring-white/10 transition active:scale-90 ${more || stickers ? "bg-white/20" : "bg-white/8"}`}
+              >
+                +
+              </button>
+              <input
+                ref={photoRef}
+                type="file"
+                accept="image/*"
+                aria-label="Photo file"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) props.onPhoto?.(f);
+                }}
+              />
+            </div>
           )}
           <textarea
             ref={inputRef}
@@ -354,15 +417,27 @@ export function ChatPanel(props: Props) {
             enterKeyHint="send"
             className="max-h-32 min-h-11 flex-1 resize-none rounded-3xl bg-white/8 px-4 py-2.5 text-base leading-6 ring-1 ring-white/10 [field-sizing:content] placeholder:text-cream/35 focus:ring-white/25 focus:outline-none"
           />
-          <button
-            type="submit"
-            disabled={!text.trim()}
-            aria-label="Send"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cream text-ink transition active:scale-90 disabled:opacity-30"
-          >
-            <SendIcon size={18} />
-          </button>
+          {props.v2 && !text.trim() && !editing && canRecord ? (
+            <button
+              type="button"
+              onClick={() => setRecording(true)}
+              aria-label="Record voice note"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cream text-lg text-ink transition active:scale-90"
+            >
+              🎙️
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!text.trim()}
+              aria-label="Send"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cream text-ink transition active:scale-90 disabled:opacity-30"
+            >
+              <SendIcon size={18} />
+            </button>
+          )}
         </form>
+        )}
       </div>
     </main>
   );
@@ -414,6 +489,7 @@ function Bubble({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
   const swiping = useRef(false);
+  const suppressClick = useRef(false); // a long-press / swipe shouldn't also count as a tap
   const lastTap = useRef(0);
   const [pressing, setPressing] = useState(false);
   const [dx, setDx] = useState(0);
@@ -436,7 +512,9 @@ function Bubble({
       start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
       swiping.current = false;
       setPressing(true);
+      suppressClick.current = false;
       timer.current = setTimeout(() => {
+        suppressClick.current = true;
         setPressing(false);
         timer.current = null;
         navigator.vibrate?.(12);
@@ -453,6 +531,7 @@ function Bubble({
         if (mx > 10 && mx > Math.abs(my)) {
           // Horizontal drag to the right → swipe-to-reply.
           swiping.current = true;
+          suppressClick.current = true;
           clearTimer();
           (e.currentTarget as HTMLElement).setPointerCapture?.(s.id);
         } else if (Math.hypot(mx, my) > 10) return clearTimer();
@@ -537,6 +616,13 @@ function Bubble({
         )}
         <div
           {...handlers}
+          onClickCapture={(e) => {
+            if (suppressClick.current) {
+              suppressClick.current = false;
+              e.stopPropagation();
+              e.preventDefault();
+            }
+          }}
           style={{ WebkitTouchCallout: "none", touchAction: "pan-y" }}
           className={`relative text-[15px] leading-snug break-words whitespace-pre-wrap transition-[transform,box-shadow] duration-200 select-none ${
             pressing ? "scale-[0.97]" : ""
@@ -653,6 +739,9 @@ function MessageBody({ m, mine, authorName, onPlay }: { m: Message; mine: boolea
   if (m.deleted_at) return <span className="italic opacity-60">🚫 Message deleted</span>;
   const meta = m.meta ?? {};
   const stop = (e: React.PointerEvent) => e.stopPropagation();
+
+  if (m.kind === "image") return <ImageMessage m={m} />;
+  if (m.kind === "voice") return <VoiceMessage m={m} mine={mine} />;
 
   if (m.kind === "sticker") {
     return <span className="inline-block text-6xl leading-none drop-shadow-lg">{meta.sticker ?? m.body}</span>;

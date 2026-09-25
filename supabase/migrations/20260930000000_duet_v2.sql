@@ -410,6 +410,9 @@ create policy "duet_media_read" on storage.objects for select to authenticated
   using (bucket_id = 'duet-media' and public.media_room_member(name));
 create policy "duet_media_write" on storage.objects for insert to authenticated
   with check (bucket_id = 'duet-media' and public.media_room_member(name));
+drop policy if exists "duet_media_delete" on storage.objects;
+create policy "duet_media_delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'duet-media' and owner_id = auth.uid()::text);
 
 -- ---------------------------------------------------------------------
 -- Realtime: live room settings (theme, rename, schedule)

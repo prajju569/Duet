@@ -39,6 +39,8 @@ export type Message = {
   deleted_at?: string | null;
   pending?: boolean;
   failed?: boolean;
+  /** Client-only preview for a photo / voice note that's still uploading. */
+  localUrl?: string;
 };
 
 export type Reaction = {

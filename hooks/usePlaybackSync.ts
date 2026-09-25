@@ -424,7 +424,15 @@ export function usePlaybackSync({ roomId, meId, initial = null, broadcast, onErr
     }
   }, []);
 
+  /** Temporarily soften the music (e.g. while a voice note plays). */
+  const duck = useCallback((on: boolean) => {
+    const p = playerRef.current;
+    if (!p || !readyRef.current || volumeRef.current === 0) return;
+    p.setVolume(on ? Math.round(volumeRef.current * 0.2) : volumeRef.current);
+  }, []);
+
   return {
+    duck,
     volume,
     setVolume,
     hostRef,

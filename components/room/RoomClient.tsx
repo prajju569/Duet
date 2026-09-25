@@ -20,6 +20,7 @@ import { useEmojiBurst } from "./EmojiBurst";
 import { DedicateSheet } from "./DedicateSheet";
 import type { RoomSong } from "./LibraryPanel";
 import { sortQueue } from "@/lib/lyrics";
+import { MEDIA_BUCKET, downscaleImage, extFor } from "@/lib/media";
 import { MILESTONE_HOURS, THEMES, togetherText } from "@/lib/themes";
 import { ThemeSheet } from "./ThemeSheet";
 import { ScheduleSheet } from "./ScheduleSheet";
@@ -702,6 +703,8 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
 
   const unsendMessage = useCallback(
     async (id: string) => {
+      const path = messagesRef.current.find((m) => m.id === id)?.meta?.path;
+      if (path) void supabase.storage.from(MEDIA_BUCKET).remove([path]); // photo / voice file goes too
       setMessages((prev) => prev.map((x) => (x.id === id ? { ...x, body: "Message deleted", meta: null, deleted_at: new Date().toISOString() } : x)));
       const { data, error } = await supabase.rpc("delete_message", { p_id: id });
       if (error) {
@@ -712,6 +715,68 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     },
     [supabase, showToast, replaceMessage, loadMessages],
   );
+
+  // Photos & voice notes: show instantly from memory, upload to private storage, then post.
+  const sendMedia = useCallback(
+    async (kind: "image" | "voice", blob: Blob, body: string, meta: MessageMeta) => {
+      const id = crypto.randomUUID();
+      const localUrl = URL.createObjectURL(blob);
+      const path = `${room.id}/${id}.${extFor(blob.type)}`;
+      const draft: Message = {
+        id,
+        room_id: room.id,
+        user_id: me.id,
+        kind,
+        body,
+        meta,
+        created_at: new Date().toISOString(),
+        pending: true,
+        localUrl,
+      };
+      setMessages((prev) => [...prev, draft]);
+      const up = await supabase.storage.from(MEDIA_BUCKET).upload(path, blob, { contentType: blob.type.split(";")[0] || undefined, upsert: false });
+      if (up.error) {
+        setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, pending: false, failed: true } : m)));
+        return showToast(kind === "image" ? "Photo didn't upload" : "Voice note didn't upload");
+      }
+      const full = { ...meta, path, mime: blob.type.split(";")[0] };
+      const { data, error } = await supabase
+        .from("messages")
+        .insert({ id, room_id: room.id, user_id: me.id, body, kind, meta: full })
+        .select()
+        .single();
+      setMessages((prev) =>
+        prev.map((m) => (m.id === id ? (error ? { ...m, pending: false, failed: true } : { ...(data as Message), localUrl }) : m)),
+      );
+      if (error) showToast("Couldn't send that");
+    },
+    [supabase, room.id, me.id, showToast],
+  );
+
+  const sendPhoto = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("image/")) return showToast("That's not a photo");
+      const { blob, width, height } = await downscaleImage(file);
+      if (blob.size > 15 * 1024 * 1024) return showToast("That photo is too big (max 15 MB)");
+      void sendMedia("image", blob, "📷 Photo", { width, height });
+    },
+    [sendMedia, showToast],
+  );
+
+  const sendVoice = useCallback(
+    (blob: Blob, seconds: number) => void sendMedia("voice", blob, `🎤 Voice note (${formatTime(seconds)})`, { seconds }),
+    [sendMedia],
+  );
+
+  // A voice note playing? Soften the music on this phone only.
+  useEffect(() => {
+    const onDuck = (e: Event) => {
+      const on = (e as CustomEvent<boolean>).detail;
+      player.duck(on);
+    };
+    window.addEventListener("duet:duck", onDuck);
+    return () => window.removeEventListener("duet:duck", onDuck);
+  }, [player]);
 
   const sendSticker = useCallback((emoji: string) => sendMessage(emoji, null, { kind: "sticker", meta: { sticker: emoji } }), [sendMessage]);
 
@@ -918,6 +983,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onUnsend={unsendMessage}
           onSticker={sendSticker}
           onPlayFromMessage={playFromMessage}
+          onPhoto={sendPhoto}
+          onVoice={sendVoice}
+          onError={showToast}
           onReact={react}
           onSeen={markRead}
           notice={
