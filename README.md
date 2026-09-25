@@ -28,6 +28,8 @@ You'll create three free accounts: **Supabase** (database and login), **Google C
    - **Project URL**, which looks like `https://abcd1234.supabase.co`
    - **anon public** key (it may be called the **publishable** key), a long string
 
+> **Rooms list + rename:** run `supabase/migrations/20260929000000_rooms_home.sql`.
+>
 > **Invite links:** run `supabase/migrations/20260928000000_invites.sql`, and make sure Vercel has `SUPABASE_SERVICE_ROLE_KEY` (the Supabase integration adds it).
 >
 > **Duet ID + 4-digit PIN login:** also run `supabase/migrations/20260927000000_pin_login.sql`, and add a `PIN_PEPPER` env var in Vercel (any 32+ random characters) before anyone creates a PIN.

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase/client";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { QuickLoginSetup } from "@/components/QuickLoginSetup";
+import { RoomsList, type HomeRoom } from "@/components/RoomsList";
 
 type Room = { id: string; code: string; name: string };
 
@@ -19,13 +20,15 @@ export function HomeClient({
   displayName,
   username,
   rooms,
+  meId,
   next,
   error,
 }: {
   email: string;
   displayName: string | null;
   username: string | null;
-  rooms: Room[];
+  rooms: HomeRoom[];
+  meId: string;
   next: string | null;
   error: string | null;
 }) {
@@ -34,7 +37,13 @@ export function HomeClient({
   const [name, setName] = useState(displayName ?? "");
   const [editingName, setEditingName] = useState(!displayName);
   const [myUsername, setMyUsername] = useState(username);
+  // Offer PIN setup once per device; after "Skip" it stays tucked away (still available via "set up PIN").
   const [pinOpen, setPinOpen] = useState(!username);
+  useEffect(() => {
+    try {
+      if (!username && !next && localStorage.getItem("duet:pin-skipped") === "1") setPinOpen(false);
+    } catch {}
+  }, [username, next]);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(error ? (ERRORS[error] ?? error) : null);
@@ -109,11 +118,11 @@ export function HomeClient({
               <button onClick={() => setEditingName(true)} className="text-cream/40 underline underline-offset-2">
                 change name
               </button>
-              {myUsername && !pinOpen && (
+              {!pinOpen && (
                 <>
                   {" · "}
                   <button onClick={() => setPinOpen(true)} className="text-cream/40 underline underline-offset-2">
-                    change PIN
+                    {myUsername ? "change PIN" : "set up PIN"}
                   </button>
                 </>
               )}
@@ -131,30 +140,29 @@ export function HomeClient({
                   if (next) router.push(next);
                 }}
                 onSkip={() => {
+                  try {
+                    localStorage.setItem("duet:pin-skipped", "1");
+                  } catch {}
                   setPinOpen(false);
                   if (next) router.push(next);
                 }}
               />
             )}
 
-            {rooms.length > 0 && (
-              <div className="mt-10">
-                <h2 className="text-xs tracking-[0.2em] text-cream/45 uppercase">Your rooms</h2>
-                <ul className="mt-3 space-y-2">
-                  {rooms.map((r) => (
-                    <li key={r.id}>
-                      <Link
-                        href={`/room/${r.code}`}
-                        className="flex items-center justify-between rounded-2xl bg-white/6 px-4 py-4 ring-1 ring-white/10 transition hover:bg-white/10 active:scale-[0.99]"
-                      >
-                        <span className="font-display text-lg italic">{r.name}</span>
-                        <span className="font-mono text-sm tracking-widest text-cream/50">{r.code}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="mt-10">
+              <h2 className="text-xs tracking-[0.2em] text-cream/45 uppercase">Your rooms</h2>
+              {rooms.length > 0 ? (
+                <RoomsList rooms={rooms} meId={meId} />
+              ) : (
+                <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm text-cream/60 ring-1 ring-white/10">
+                  No rooms on this account yet. Create one below.
+                  <span className="mt-2 block text-xs text-cream/45">
+                    Made rooms before? You might be signed into a different account — check the Duet ID at the bottom, or sign out and
+                    log in with the other one.
+                  </span>
+                </div>
+              )}
+            </div>
 
             <div className="mt-10 space-y-3">
               <button
@@ -180,7 +188,11 @@ export function HomeClient({
 
         {msg && <p className="mt-5 text-sm text-rose-300">{msg}</p>}
         {!editingName && <InstallPrompt />}
-        <p className="mt-12 text-center text-xs text-cream/30">Signed in as {email}</p>
+        <p className="mt-12 text-center text-xs text-cream/35">
+          Signed in as {myUsername ? <b>@{myUsername}</b> : null}
+          {myUsername && !email.endsWith("@guests.duet.local") ? " · " : ""}
+          {email.endsWith("@guests.duet.local") ? "" : email}
+        </p>
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ import { FavouritesList } from "./FavouritesList";
 type Player = ReturnType<typeof usePlaybackSync>;
 
 type Props = {
+  roomName: string;
   player: Player;
   queue: QueueItem[];
   favourites: Favourite[];
@@ -101,7 +102,7 @@ export function PlayerPanel(props: Props) {
         <button onClick={() => setOpen(false)} className="rounded-full p-2 text-cream/70 hover:bg-white/5" aria-label="Collapse player">
           <ChevronDown size={22} />
         </button>
-        <span className="text-xs tracking-[0.2em] text-cream/50 uppercase">Listening together</span>
+        <span className="max-w-[60vw] truncate text-xs tracking-[0.2em] text-cream/50 uppercase">{props.roomName}</span>
         <span className="w-9" />
       </div>
 

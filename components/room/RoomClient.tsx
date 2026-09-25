@@ -15,6 +15,7 @@ import { TopBar } from "./TopBar";
 import { JoinOverlay } from "./JoinOverlay";
 import { InviteSheet } from "./InviteSheet";
 import { QuickLoginSetup } from "@/components/QuickLoginSetup";
+import { RenameSheet } from "@/components/RoomsList";
 
 /**
  * iOS keeps the page height when the keyboard opens and scrolls the whole page up,
@@ -175,6 +176,11 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const [connected, setConnected] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(openInvite);
+  const [roomName, setRoomName] = useState(room.name);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState(room.name);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameErr, setRenameErr] = useState<string | null>(null);
   const [username, setUsername] = useState(me.username);
   const [pinSheet, setPinSheet] = useState(false);
   const [pinNudgeDismissed, setPinNudgeDismissed] = useState(false);
@@ -335,6 +341,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
 
       roomChannel
         .on("broadcast", { event: "playback" }, ({ payload }) => receiveRef.current(payload as PlaybackState))
+        .on("broadcast", { event: "room-renamed" }, ({ payload }) => {
+          if (typeof payload?.name === "string") setRoomName(payload.name);
+        })
         .on("broadcast", { event: "typing" }, ({ payload }) => {
           if (payload?.userId === me.id) return;
           setPartnerTyping(!!payload?.typing);
@@ -418,6 +427,21 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       ]).then(() => undefined);
     };
   }, [supabase, room.id, me.id, me.name, loadMessages, loadMessagesSince, loadQueue, loadMembers, channelKey]);
+
+  // Room renamed elsewhere (e.g. from the home screen). Its own channel, so if the rooms
+  // table isn't enabled for Realtime yet, chat and sync are unaffected.
+  useEffect(() => {
+    const ch = supabase
+      .channel(`roomname:${room.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${room.id}` }, ({ new: row }) => {
+        const n = (row as { name?: string }).name;
+        if (n) setRoomName(n);
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [supabase, room.id]);
 
   // Keep presence "listening now" fresh — debounced, since Realtime rate-limits presence updates.
   useEffect(() => {
@@ -570,7 +594,12 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
 
   const topBar = (
     <TopBar
-      roomName={room.name}
+      roomName={roomName}
+      onRename={() => {
+        setRenameDraft(roomName);
+        setRenameErr(null);
+        setRenameOpen(true);
+      }}
       code={room.code}
       me={me}
       partner={partner}
@@ -584,6 +613,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       <div className="relative z-10 flex h-full flex-col lg:flex-row">
         <div className="lg:hidden">{topBar}</div>
         <PlayerPanel
+          roomName={roomName}
           player={player}
           queue={queue}
           favourites={favourites}
@@ -641,6 +671,29 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       )}
 
       <ConnectionBanner view={connection} />
+
+      {renameOpen && (
+        <RenameSheet
+          value={renameDraft}
+          onChange={setRenameDraft}
+          busy={renameBusy}
+          error={renameErr}
+          onClose={() => setRenameOpen(false)}
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!renameDraft.trim()) return;
+            setRenameBusy(true);
+            setRenameErr(null);
+            const { data, error } = await supabase.rpc("rename_room", { p_room: room.id, p_name: renameDraft });
+            setRenameBusy(false);
+            if (error) return setRenameErr("Couldn't rename — try again.");
+            setRoomName(data as string);
+            setRenameOpen(false);
+            // Tell the other phone right away (the database change is the backup path).
+            void roomChannelRef.current?.send({ type: "broadcast", event: "room-renamed", payload: { name: data } });
+          }}
+        />
+      )}
 
       {inviteOpen && !partner && <InviteSheet roomId={room.id} myName={me.name} onClose={() => setInviteOpen(false)} />}
 

@@ -15,6 +15,7 @@ type Props = {
   presence: Record<string, PresenceInfo>;
   /** Opens the "type their name" invite sheet (only while the second seat is empty). */
   onInvite: () => void;
+  onRename: () => void;
 };
 
 function Person({ userId, name, presence, isMe }: { userId: string; name: string; presence?: PresenceInfo; isMe?: boolean }) {
@@ -34,20 +35,15 @@ function Person({ userId, name, presence, isMe }: { userId: string; name: string
   );
 }
 
-export function TopBar({ roomName, code, me, partner, presence, onInvite }: Props) {
+export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename }: Props) {
   const [copied, setCopied] = useState(false);
+  const [menu, setMenu] = useState(false);
 
-  async function invite() {
-    if (!partner) return onInvite();
-    const url = `${window.location.origin}/room/${code}`;
-    const text = `Come listen with me on Duet 🎧 ${url}`;
+  async function copyCode() {
     try {
-      if (navigator.share) await navigator.share({ title: "Duet", text, url });
-      else {
-        await navigator.clipboard.writeText(url);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1800);
-      }
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     } catch {}
   }
 
@@ -69,13 +65,62 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite }: Prop
           <Person userId={me.id} name={me.name} presence={presence[me.id]} isMe />
         </div>
       </div>
-      <button
-        onClick={invite}
-        className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-medium text-cream/85 ring-1 ring-white/10 transition hover:bg-white/15 active:scale-95"
-      >
-        <LinkIcon size={13} />
-        {copied ? "Link copied" : partner ? code : "Invite"}
-      </button>
+      {!partner && (
+        <button
+          onClick={onInvite}
+          className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-medium text-cream/85 ring-1 ring-white/10 transition hover:bg-white/15 active:scale-95"
+        >
+          <LinkIcon size={13} />
+          Invite
+        </button>
+      )}
+      <div className="relative">
+        <button
+          onClick={() => setMenu((m) => !m)}
+          aria-label="Room options"
+          className="flex size-8 items-center justify-center rounded-full text-cream/70 ring-1 ring-white/10 hover:bg-white/10"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <circle cx="5" cy="12" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="19" cy="12" r="2" />
+          </svg>
+        </button>
+        {menu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
+            <div className="animate-pop absolute top-10 right-0 z-50 w-56 overflow-hidden rounded-2xl bg-zinc-900/95 py-1.5 text-sm shadow-2xl ring-1 ring-white/10 backdrop-blur">
+              <div className="truncate px-4 pt-1.5 pb-2 font-display text-base text-cream/90 italic">{roomName}</div>
+              <button
+                onClick={() => {
+                  setMenu(false);
+                  onRename();
+                }}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+              >
+                ✏️ <span>Rename room</span>
+              </button>
+              {!partner && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    onInvite();
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                >
+                  💌 <span>Invite someone</span>
+                </button>
+              )}
+              <button onClick={copyCode} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8">
+                🔑 <span>{copied ? "Copied ✓" : `Copy room code · ${code}`}</span>
+              </button>
+              <Link href="/" className="flex w-full items-center gap-3 px-4 py-2.5 hover:bg-white/8">
+                🏠 <span>All rooms</span>
+              </Link>
+            </div>
+          </>
+        )}
+      </div>
     </header>
   );
 }
