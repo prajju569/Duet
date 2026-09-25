@@ -89,7 +89,7 @@ By default, a login link only works in the same browser that asked for it. On ph
 1. Open your site on your phone and enter your email. Tap the link in the email, or type the 6-digit code.
 2. Enter your first name. It's shown on your picks.
 3. Tap **Create a new room** — type their name and tap **Share on WhatsApp**.
-4. They tap the link, pick a **Duet ID** and a **4-digit PIN**, and they're in your room — no email, no sign-up. (They can their Duet ID + 4-digit PIN also works on other phones.)
+4. They tap the link, pick a **Duet ID** and a **4-digit PIN**, and they're in your room — no email, no sign-up. Their Duet ID + PIN also works on any other phone.
 5. Each of you taps **Tap to join the music** once. Browsers need one tap before they're allowed to play sound.
 6. Tap the mini player to open it, go to **Search**, find a song and tap it. It plays for both of you. 🎶
 
