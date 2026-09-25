@@ -22,8 +22,11 @@ export function LoginForm({ next, error }: { next: string; error?: string }) {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     });
     setBusy(false);
-    if (error) setMsg(error.message);
-    else setSent(true);
+    if (error) {
+      // Supabase returns this when "Allow new users to sign up" is off.
+      const privateRoom = /signups? not allowed|not allowed for otp/i.test(error.message);
+      setMsg(privateRoom ? "This Duet is private — ask the owner to let you in." : error.message);
+    } else setSent(true);
   }
 
   async function verifyCode(e: React.FormEvent) {
