@@ -26,12 +26,14 @@ const EMPTY: PlaybackState = {
 type Options = {
   roomId: string;
   meId: string;
+  /** State rendered by the server, shown instantly while we sync the clock. */
+  initial?: PlaybackState | null;
   /** Send the new state to the other person over the Broadcast channel. */
   broadcast: (s: PlaybackState) => void;
   onError: (msg: string) => void;
 };
 
-export function usePlaybackSync({ roomId, meId, broadcast, onError }: Options) {
+export function usePlaybackSync({ roomId, meId, initial = null, broadcast, onError }: Options) {
   const supabase = getSupabase();
 
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -42,14 +44,14 @@ export function usePlaybackSync({ roomId, meId, broadcast, onError }: Options) {
   const offsetRef = useRef(0);
 
   /** Latest state stamped by the server that we accepted ("last action wins"). */
-  const serverStateRef = useRef<PlaybackState | null>(null);
+  const serverStateRef = useRef<PlaybackState | null>(initial);
   /** What we're currently showing / applying (may be an optimistic local action). */
-  const shownRef = useRef<PlaybackState | null>(null);
+  const shownRef = useRef<PlaybackState | null>(initial);
   const optimisticRef = useRef(false);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [state, setState] = useState<PlaybackState | null>(null);
+  const [state, setState] = useState<PlaybackState | null>(initial);
   const [ready, setReady] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);

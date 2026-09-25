@@ -136,21 +136,35 @@ type Props = {
   room: { id: string; code: string; name: string };
   me: { id: string; name: string };
   initialMembers: Member[];
+  /** Server-rendered first screen, so the room opens already filled in. */
+  initial: {
+    messages: Message[];
+    hasOlder: boolean;
+    reactions: Reaction[];
+    queue: QueueItem[];
+    favourites: Favourite[];
+    playback: PlaybackRow | null;
+  };
 };
+
+const reactionMap = (rows: Reaction[]) =>
+  Object.fromEntries(rows.map((r) => [`${r.message_id}:${r.user_id}`, r])) as Record<string, Reaction>;
 
 const PAGE = 60;
 
-export function RoomClient({ room, me, initialMembers }: Props) {
+export function RoomClient({ room, me, initialMembers, initial }: Props) {
   const supabase = getSupabase();
   const roomChannelRef = useRef<RealtimeChannel | null>(null);
   const teardownRef = useRef<Promise<void>>(Promise.resolve());
 
   const [members, setMembers] = useState<Member[]>(initialMembers);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [hasOlder, setHasOlder] = useState(false);
-  const [reactions, setReactions] = useState<Record<string, Reaction>>({}); // key: message_id:user_id
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [favourites, setFavourites] = useState<Favourite[]>([]);
+  const [messages, setMessages] = useState<Message[]>(initial.messages);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const [hasOlder, setHasOlder] = useState(initial.hasOlder);
+  const [reactions, setReactions] = useState<Record<string, Reaction>>(() => reactionMap(initial.reactions)); // key: message_id:user_id
+  const [queue, setQueue] = useState<QueueItem[]>(initial.queue);
+  const [favourites, setFavourites] = useState<Favourite[]>(initial.favourites);
   const [presence, setPresence] = useState<Record<string, PresenceInfo>>({});
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -181,7 +195,13 @@ export function RoomClient({ room, me, initialMembers }: Props) {
   }, []);
 
   const appHeight = useVisualViewportHeight();
-  const player = usePlaybackSync({ roomId: room.id, meId: me.id, broadcast: broadcastPlayback, onError: showToast });
+  const player = usePlaybackSync({
+    roomId: room.id,
+    meId: me.id,
+    initial: initial.playback ? fromRow(initial.playback) : null,
+    broadcast: broadcastPlayback,
+    onError: showToast,
+  });
   useWakeLock(player.unlocked && !!player.state?.isPlaying);
 
   // ── Data loading ───────────────────────────────────────────────────
@@ -211,6 +231,20 @@ export function RoomClient({ room, me, initialMembers }: Props) {
         return next;
       });
     }
+  }, [supabase, room.id]);
+
+  /** Messages that arrived after the server render (merged, no reload of the whole list). */
+  const loadMessagesSince = useCallback(async () => {
+    const newest = [...messagesRef.current].reverse().find((m) => !m.pending);
+    let q = supabase.from("messages").select("*").eq("room_id", room.id).order("created_at");
+    if (newest) q = q.gt("created_at", newest.created_at);
+    const { data } = await q.limit(200);
+    const rows = (data ?? []) as Message[];
+    if (!rows.length) return;
+    setMessages((prev) => {
+      const seen = new Set(prev.map((m) => m.id));
+      return [...prev, ...rows.filter((r) => !seen.has(r.id))];
+    });
   }, [supabase, room.id]);
 
   const loadOlder = useCallback(async () => {
@@ -259,16 +293,8 @@ export function RoomClient({ room, me, initialMembers }: Props) {
     );
   }, [supabase, room.id]);
 
-  useEffect(() => {
-    void loadMessages();
-    void loadQueue();
-    void supabase
-      .from("favourites")
-      .select("*")
-      .eq("user_id", me.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setFavourites((data ?? []) as Favourite[]));
-  }, [supabase, me.id, loadMessages, loadQueue]);
+  // (No initial client fetch: the server already sent messages, queue & favourites.
+  //  loadMessages / loadQueue run again only after a reconnect, to fill gaps.)
 
   // ── Realtime ───────────────────────────────────────────────────────
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -360,13 +386,13 @@ export function RoomClient({ room, me, initialMembers }: Props) {
         })
         .subscribe((status) => {
           if (status === "SUBSCRIBED") {
-            // After a reconnect, fill whatever we missed.
-            if (subscribedOnce) {
-              void loadMessages();
-              void loadQueue();
-              void loadMembers();
-              void refetchRef.current();
-            }
+            // Fill anything that changed while we weren't listening — the gap between the
+            // server render and this subscription, or the time we were disconnected.
+            void loadMembers();
+            void loadQueue();
+            void refetchRef.current();
+            if (subscribedOnce) void loadMessages();
+            else void loadMessagesSince();
             subscribedOnce = true;
           }
         });
@@ -381,7 +407,7 @@ export function RoomClient({ room, me, initialMembers }: Props) {
         dbChannel && supabase.removeChannel(dbChannel),
       ]).then(() => undefined);
     };
-  }, [supabase, room.id, me.id, me.name, loadMessages, loadQueue, loadMembers, channelKey]);
+  }, [supabase, room.id, me.id, me.name, loadMessages, loadMessagesSince, loadQueue, loadMembers, channelKey]);
 
   // Keep presence "listening now" fresh — debounced, since Realtime rate-limits presence updates.
   useEffect(() => {
