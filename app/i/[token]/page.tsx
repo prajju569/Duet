@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getMyProfile } from "@/lib/profile";
 import { InviteJoin } from "./InviteJoin";
 
 type Preview = { status: "ok" | "used" | "expired" | "invalid"; from?: string; to?: string; used_by_me?: boolean };
@@ -40,7 +41,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const { data: { user } } = await supabase.auth.getUser();
   let signedInAs: string | null = null;
   if (user) {
-    const { data: me } = await supabase.from("profiles").select("display_name, username").eq("id", user.id).maybeSingle();
+    const me = await getMyProfile(supabase, user.id);
     signedInAs = me?.username ?? me?.display_name ?? "yourself";
   }
 

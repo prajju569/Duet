@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { preconnect } from "react-dom";
 import { createClient } from "@/lib/supabase/server";
+import { getMyProfile } from "@/lib/profile";
 import { RoomClient } from "@/components/room/RoomClient";
 import type { Favourite, Member, Message, QueueItem, Reaction } from "@/lib/types";
 import type { PlaybackRow } from "@/lib/sync";
@@ -28,7 +29,7 @@ export default async function RoomPage({
 
   // Profile + join in parallel. join_room is a no-op if you're already in.
   const [{ data: profile }, { data: room, error }] = await Promise.all([
-    supabase.from("profiles").select("display_name, username").eq("id", user.id).maybeSingle(),
+    getMyProfile(supabase, user.id).then((data) => ({ data })),
     supabase.rpc("join_room", { p_code: code }),
   ]);
   if (!profile?.display_name) redirect(`/?next=${encodeURIComponent(`/room/${code}`)}`);

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getMyProfile } from "@/lib/profile";
 import { HomeClient } from "./HomeClient";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
@@ -9,7 +10,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: memberships }] = await Promise.all([
-    supabase.from("profiles").select("display_name, username").eq("id", user.id).maybeSingle(),
+    getMyProfile(supabase, user.id).then((data) => ({ data })),
     supabase.from("room_members").select("room_id, rooms(id, code, name, created_at)").eq("user_id", user.id),
   ]);
 
