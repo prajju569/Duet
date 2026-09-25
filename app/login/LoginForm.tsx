@@ -56,13 +56,13 @@ export function LoginForm({ next, error }: { next: string; error?: string }) {
               className="h-13 w-full rounded-2xl bg-white/8 px-4 text-base ring-1 ring-white/10 placeholder:text-cream/35 focus:ring-white/30 focus:outline-none"
             />
             <button disabled={busy} className="h-13 w-full rounded-2xl bg-cream font-semibold text-ink transition active:scale-[0.98] disabled:opacity-50">
-              {busy ? "Sending…" : "Email me a magic link"}
+              {busy ? "Sending…" : "Email me a login code"}
             </button>
           </form>
         ) : (
           <div className="mt-10">
             <div className="rounded-2xl bg-white/6 p-4 text-sm text-cream/80 ring-1 ring-white/10">
-              ✉️ Sent to <b>{email}</b>. Open the link on this device — or type the code from the email below.
+              ✉️ We sent a code to <b>{email}</b>. Type it below. (Check Spam if you don&apos;t see it.)
             </div>
             <form onSubmit={verifyCode} className="mt-4 space-y-3">
               <input
@@ -70,8 +70,9 @@ export function LoginForm({ next, error }: { next: string; error?: string }) {
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                placeholder="123456"
-                className="h-13 w-full rounded-2xl bg-white/8 px-4 text-center text-2xl tracking-[0.4em] ring-1 ring-white/10 placeholder:text-cream/25 focus:ring-white/30 focus:outline-none"
+                placeholder="Enter code"
+                autoFocus
+                className="h-13 w-full rounded-2xl bg-white/8 px-4 text-center text-2xl tracking-[0.4em] ring-1 placeholder:tracking-normal placeholder:text-base ring-white/10 placeholder:text-cream/25 focus:ring-white/30 focus:outline-none"
               />
               <button disabled={busy || code.length < 6} className="h-13 w-full rounded-2xl bg-cream font-semibold text-ink transition active:scale-[0.98] disabled:opacity-40">
                 {busy ? "Checking…" : "Sign in with code"}
