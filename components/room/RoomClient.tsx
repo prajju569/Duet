@@ -21,6 +21,7 @@ import { DedicateSheet } from "./DedicateSheet";
 import type { RoomSong } from "./LibraryPanel";
 import { sortQueue } from "@/lib/lyrics";
 import { MEDIA_BUCKET, downscaleImage, extFor } from "@/lib/media";
+import { usePush } from "@/hooks/usePush";
 import { MILESTONE_HOURS, THEMES, togetherText } from "@/lib/themes";
 import { ThemeSheet } from "./ThemeSheet";
 import { ScheduleSheet } from "./ScheduleSheet";
@@ -209,6 +210,41 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const broadcastPlayback = useCallback((s: PlaybackState) => {
     void roomChannelRef.current?.send({ type: "broadcast", event: "playback", payload: s });
   }, []);
+
+  const push = usePush(me.id, features.v2);
+  const [pushPromptHidden, setPushPromptHidden] = useState(true);
+  useEffect(() => {
+    try {
+      setPushPromptHidden(localStorage.getItem("duet:push-prompt") === "hide");
+    } catch {}
+  }, []);
+  const hidePushPrompt = () => {
+    setPushPromptHidden(true);
+    try {
+      localStorage.setItem("duet:push-prompt", "hide");
+    } catch {}
+  };
+  /** Ask the server to buzz my partner (it builds the text from the saved message). */
+  const notifyPartner = useCallback(
+    (messageId: string) =>
+      void fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId: room.id, kind: "message", messageId }),
+      }).catch(() => {}),
+    [room.id],
+  );
+  const togglePush = useCallback(async () => {
+    if (push.status === "on") {
+      await push.turnOff();
+      return showToast("🔕 Notifications off on this phone");
+    }
+    if (push.status === "needs-install") return showToast("On iPhone: Share → Add to Home Screen, then open Duet from there");
+    if (push.status === "blocked") return showToast("Notifications are blocked — allow them in your browser settings");
+    const ok = await push.turnOn();
+    showToast(ok ? "🔔 Notifications on" : "Notifications weren't allowed");
+    if (ok) hidePushPrompt();
+  }, [push, showToast]);
 
   const burst = useEmojiBurst();
   const lastBurst = useRef(0);
@@ -679,6 +715,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         prev.map((m) => (m.id === msg.id ? (error ? { ...m, pending: false, failed: true } : (data as Message)) : m)),
       );
       if (error) showToast(replyTo && /reply_to/.test(error.message) ? "Replies need the new database update (see README)" : "Message didn't send");
+      else notifyPartner(msg.id);
     },
     [supabase, room.id, me.id, showToast],
   );
@@ -749,8 +786,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         prev.map((m) => (m.id === id ? (error ? { ...m, pending: false, failed: true } : { ...(data as Message), localUrl }) : m)),
       );
       if (error) showToast("Couldn't send that");
+      else notifyPartner(id);
     },
-    [supabase, room.id, me.id, showToast],
+    [supabase, room.id, me.id, showToast, notifyPartner],
   );
 
   const sendPhoto = useCallback(
@@ -925,6 +963,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       onTheme={features.v2 ? () => setSheet("theme") : undefined}
       onSchedule={features.v2 ? () => setSheet("schedule") : undefined}
       togetherText={features.v2 && listened >= 60 ? togetherText(listened) : null}
+      push={push.status !== "unsupported" ? { status: push.status, toggle: togglePush } : null}
       onRename={() => {
         setRenameDraft(roomName);
         setRenameErr(null);
@@ -1001,6 +1040,20 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
                 </div>
                 <button onClick={cancelSchedule} className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-xs">
                   Cancel
+                </button>
+              </div>
+            ) : partner && !pushPromptHidden && (push.status === "off" || push.status === "needs-install") && player.unlocked && messages.length > 0 ? (
+              <div className="animate-rise mb-2 flex items-center gap-3 rounded-2xl bg-zinc-900/90 p-2.5 pl-3.5 ring-1 ring-white/10 backdrop-blur">
+                <span className="text-lg">🔔</span>
+                <div className="min-w-0 flex-1 text-sm leading-snug">
+                  <b>Get a buzz</b>
+                  <span className="text-cream/60"> when {firstName(partner.name)} messages you</span>
+                </div>
+                <button onClick={togglePush} className="shrink-0 rounded-full bg-cream px-3 py-1.5 text-sm font-semibold text-ink">
+                  {push.status === "needs-install" ? "How?" : "Turn on"}
+                </button>
+                <button onClick={hidePushPrompt} aria-label="Not now" className="shrink-0 p-1 text-cream/50">
+                  ✕
                 </button>
               </div>
             ) : // People who joined by invite can't log in elsewhere until they pick a PIN.

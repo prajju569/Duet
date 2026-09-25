@@ -21,6 +21,7 @@ type Props = {
   onTheme?: () => void;
   onSchedule?: () => void;
   togetherText?: string | null;
+  push?: { status: string; toggle: () => void } | null;
 };
 
 function Person({ userId, name, presence, isMe }: { userId: string; name: string; presence?: PresenceInfo; isMe?: boolean }) {
@@ -40,7 +41,7 @@ function Person({ userId, name, presence, isMe }: { userId: string; name: string
   );
 }
 
-export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onTheme, onSchedule, togetherText }: Props) {
+export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onTheme, onSchedule, togetherText, push }: Props) {
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
 
@@ -152,6 +153,20 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
                 >
                   ⏰ <span>Schedule a song</span>
+                </button>
+              )}
+              {push && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    push.toggle();
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                >
+                  {push.status === "on" ? "🔔" : "🔕"}{" "}
+                  <span>
+                    Notifications: <b>{push.status === "on" ? "On" : push.status === "blocked" ? "Blocked" : "Off"}</b>
+                  </span>
                 </button>
               )}
               <Link href="/" className="flex w-full items-center gap-3 px-4 py-2.5 hover:bg-white/8">
