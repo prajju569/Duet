@@ -17,6 +17,10 @@ type Props = {
   onInvite: () => void;
   onRename: () => void;
   onNudge: () => void;
+  /** v2 extras (menu entries appear only when provided) */
+  onTheme?: () => void;
+  onSchedule?: () => void;
+  togetherText?: string | null;
 };
 
 function Person({ userId, name, presence, isMe }: { userId: string; name: string; presence?: PresenceInfo; isMe?: boolean }) {
@@ -36,7 +40,7 @@ function Person({ userId, name, presence, isMe }: { userId: string; name: string
   );
 }
 
-export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge }: Props) {
+export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onTheme, onSchedule, togetherText }: Props) {
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
 
@@ -101,7 +105,10 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
           <>
             <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
             <div className="animate-pop absolute top-10 right-0 z-50 w-56 overflow-hidden rounded-2xl bg-zinc-900/95 py-1.5 text-sm shadow-2xl ring-1 ring-white/10 backdrop-blur">
-              <div className="truncate px-4 pt-1.5 pb-2 font-display text-base text-cream/90 italic">{roomName}</div>
+              <div className="px-4 pt-1.5 pb-2">
+                <div className="truncate font-display text-base text-cream/90 italic">{roomName}</div>
+                {togetherText && <div className="text-[11px] text-rose-200/80">🎧 {togetherText} listening together</div>}
+              </div>
               <button
                 onClick={() => {
                   setMenu(false);
@@ -125,6 +132,28 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
               <button onClick={copyCode} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8">
                 🔑 <span>{copied ? "Copied ✓" : `Copy room code · ${code}`}</span>
               </button>
+              {onTheme && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    onTheme();
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                >
+                  🎨 <span>Theme</span>
+                </button>
+              )}
+              {onSchedule && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    onSchedule();
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                >
+                  ⏰ <span>Schedule a song</span>
+                </button>
+              )}
               <Link href="/" className="flex w-full items-center gap-3 px-4 py-2.5 hover:bg-white/8">
                 🏠 <span>All rooms</span>
               </Link>

@@ -332,6 +332,39 @@ begin
 end;
 $$;
 
+-- Scheduled song ("good night song at 10:30"): whichever phone gets there first
+-- starts it for both; the schedule is cleared atomically so it fires once.
+create or replace function public.fire_scheduled_song(p_room uuid)
+returns public.playback_state
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_room  public.rooms;
+  v_at    timestamptz;
+  v_t     jsonb;
+  v_state public.playback_state;
+begin
+  if not public.is_room_member(p_room) then raise exception 'NOT_A_MEMBER'; end if;
+  select * into v_room from public.rooms where id = p_room for update;
+  select * into v_state from public.playback_state where room_id = p_room;
+  if v_room.scheduled is null then return v_state; end if;
+
+  v_at := (v_room.scheduled->>'at')::timestamptz;
+  if v_at > now() + interval '5 seconds' then return v_state; end if;      -- not yet
+  update public.rooms set scheduled = null where id = p_room;
+  if v_at < now() - interval '15 minutes' then return v_state; end if;    -- missed it: just clear
+
+  v_t := v_room.scheduled->'track';
+  return public._apply_playback(p_room, v_t->>'videoId', v_t->>'title', v_t->>'channel', v_t->>'thumbnail',
+    nullif(v_t->>'durationSec', '')::int, nullif(v_room.scheduled->>'by', '')::uuid, true, 0,
+    '⏰ ' || coalesce(nullif(v_room.scheduled->>'label', ''), 'Scheduled song') || ': ' || coalesce(v_t->>'title', 'a song'));
+end;
+$$;
+revoke execute on function public.fire_scheduled_song(uuid) from public, anon;
+grant execute on function public.fire_scheduled_song(uuid) to authenticated;
+
 -- ---------------------------------------------------------------------
 -- Push notifications
 -- ---------------------------------------------------------------------

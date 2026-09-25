@@ -20,6 +20,9 @@ import { useEmojiBurst } from "./EmojiBurst";
 import { DedicateSheet } from "./DedicateSheet";
 import type { RoomSong } from "./LibraryPanel";
 import { sortQueue } from "@/lib/lyrics";
+import { MILESTONE_HOURS, THEMES, togetherText } from "@/lib/themes";
+import { ThemeSheet } from "./ThemeSheet";
+import { ScheduleSheet } from "./ScheduleSheet";
 
 export type ScheduledSong = { at: string; track: Track; by: string; label?: string };
 import type { Features } from "@/lib/features";
@@ -163,6 +166,10 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const [queue, setQueue] = useState<QueueItem[]>(() => sortQueue(initial.queue));
   const [ourSongs, setOurSongs] = useState<RoomSong[]>([]);
   const [autoplay, setAutoplay] = useState(room.autoplay ?? true);
+  const [theme, setTheme] = useState<string | null>(room.theme ?? null);
+  const [listened, setListened] = useState(room.listenedSeconds ?? 0);
+  const [scheduled, setScheduled] = useState<ScheduledSong | null>(room.scheduled ?? null);
+  const [sheet, setSheet] = useState<"theme" | "schedule" | null>(null);
   const [favourites, setFavourites] = useState<Favourite[]>(initial.favourites);
   const [presence, setPresence] = useState<Record<string, PresenceInfo>>({});
   const [partnerTyping, setPartnerTyping] = useState(false);
@@ -529,15 +536,83 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     [supabase, room.id],
   );
 
+  // ── Us layer (v2) ──────────────────────────────────────────────────
+  const scheduleOptions = useMemo(() => {
+    const out: Track[] = [];
+    const add = (t: Track) => !out.some((x) => x.videoId === t.videoId) && out.push(t);
+    const s = player.state;
+    if (s?.videoId) add({ videoId: s.videoId, title: s.title ?? "", channel: s.channel, thumbnail: s.thumbnail, durationSec: s.durationSec });
+    ourSongs.forEach((o) => add({ videoId: o.video_id, title: o.title, channel: o.channel, thumbnail: o.thumbnail, durationSec: o.duration_sec }));
+    favourites.forEach((f) => add({ videoId: f.video_id, title: f.title, channel: f.channel, thumbnail: f.thumbnail, durationSec: f.duration_sec }));
+    return out.slice(0, 40);
+  }, [player.state, ourSongs, favourites]);
+
+  // Listening-together counter: while you're BOTH listening, one phone (the lower
+  // user id) adds 30 s every 30 s. The other phone hears about it via Realtime.
+  const bothListening = !!partner && player.listening && !!presence[partner.userId]?.listening;
+  const reporter = !!partner && me.id < partner.userId;
+  useEffect(() => {
+    if (!features.v2 || !bothListening || !reporter) return;
+    const t = setInterval(async () => {
+      const { data } = await supabase.rpc("add_listen_time", { p_room: room.id, p_seconds: 30 });
+      if (typeof data === "number") setListened((prev) => Math.max(prev, data));
+    }, 30_000);
+    return () => clearInterval(t);
+  }, [features.v2, bothListening, reporter, supabase, room.id]);
+
+  const lastMilestone = useRef<number | null>(null);
+  useEffect(() => {
+    const hours = Math.floor(listened / 3600);
+    const reached = MILESTONE_HOURS.filter((h) => h <= hours).pop() ?? 0;
+    if (lastMilestone.current === null) {
+      lastMilestone.current = reached; // don't celebrate on page load
+      return;
+    }
+    if (reached > lastMilestone.current) {
+      lastMilestone.current = reached;
+      burstRef.current("🎉");
+      showToast(`🎉 ${reached} ${reached === 1 ? "hour" : "hours"} of listening together!`);
+    }
+  }, [listened, showToast]);
+
+  // Scheduled song: when the time comes, whichever phone is open starts it (once).
+  const firing = useRef(false);
+  useEffect(() => {
+    if (!features.v2 || !scheduled) return;
+    const ms = new Date(scheduled.at).getTime() - Date.now();
+    if (ms > 24 * 3600 * 1000) return;
+    const fire = async () => {
+      if (firing.current) return;
+      firing.current = true;
+      const { data, error } = await supabase.rpc("fire_scheduled_song", { p_room: room.id });
+      firing.current = false;
+      setScheduled(null);
+      if (!error && data) {
+        const st = fromRow(data as PlaybackRow);
+        if (player.receive(st)) broadcastPlayback(st);
+      }
+    };
+    const t = setTimeout(fire, Math.max(0, ms));
+    return () => clearTimeout(t);
+  }, [features.v2, scheduled, supabase, room.id, player, broadcastPlayback]);
+
+  const cancelSchedule = useCallback(async () => {
+    setScheduled(null);
+    await supabase.rpc("update_room_settings", { p_room: room.id, p_settings: { scheduled: null } });
+  }, [supabase, room.id]);
+
   // Room renamed elsewhere (e.g. from the home screen). Its own channel, so if the rooms
   // table isn't enabled for Realtime yet, chat and sync are unaffected.
   useEffect(() => {
     const ch = supabase
       .channel(`roomname:${room.id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${room.id}` }, ({ new: row }) => {
-        const r = row as { name?: string; autoplay?: boolean };
+        const r = row as { name?: string; autoplay?: boolean; theme?: string | null; listened_seconds?: number; scheduled?: ScheduledSong | null };
         if (r.name) setRoomName(r.name);
         if (typeof r.autoplay === "boolean") setAutoplay(r.autoplay);
+        if ("theme" in r) setTheme(r.theme ?? null);
+        if (typeof r.listened_seconds === "number") setListened((prev) => Math.max(prev, Number(r.listened_seconds)));
+        if ("scheduled" in r) setScheduled(r.scheduled ?? null);
       })
       .subscribe();
     return () => {
@@ -772,15 +847,19 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     [supabase, favourites, me.id, showToast],
   );
 
+  const shown = (theme && THEMES[theme]?.palette) || palette;
   const style = useMemo(
-    () => ({ "--c1": palette.c1, "--c2": palette.c2, "--c3": palette.c3 }) as React.CSSProperties,
-    [palette],
+    () => ({ "--c1": shown.c1, "--c2": shown.c2, "--c3": shown.c3 }) as React.CSSProperties,
+    [shown],
   );
 
   const topBar = (
     <TopBar
       roomName={roomName}
       onNudge={sendNudge}
+      onTheme={features.v2 ? () => setSheet("theme") : undefined}
+      onSchedule={features.v2 ? () => setSheet("schedule") : undefined}
+      togetherText={features.v2 && listened >= 60 ? togetherText(listened) : null}
       onRename={() => {
         setRenameDraft(roomName);
         setRenameErr(null);
@@ -842,7 +921,21 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onReact={react}
           onSeen={markRead}
           notice={
-            // People who joined by invite can't log in elsewhere until they pick a PIN.
+            scheduled && features.v2 ? (
+              <div className="animate-rise mb-2 flex items-center gap-3 rounded-2xl bg-zinc-900/90 p-2.5 pl-3.5 ring-1 ring-white/10 backdrop-blur">
+                <span className="text-lg">⏰</span>
+                <div className="min-w-0 flex-1 text-sm leading-snug">
+                  <b>{scheduled.label ?? "Scheduled"}</b>
+                  <span className="text-cream/60">
+                    {" · "}
+                    {new Date(scheduled.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} — {scheduled.track.title}
+                  </span>
+                </div>
+                <button onClick={cancelSchedule} className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-xs">
+                  Cancel
+                </button>
+              </div>
+            ) : // People who joined by invite can't log in elsewhere until they pick a PIN.
             !username && !pinNudgeDismissed && player.unlocked ? (
               <div className="animate-rise mb-2 flex items-center gap-3 rounded-2xl bg-zinc-900/90 p-2.5 pl-3.5 ring-1 ring-white/10 backdrop-blur">
                 <span className="text-lg">🔐</span>
@@ -873,6 +966,33 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       )}
 
       <ConnectionBanner view={connection} />
+      {sheet === "theme" && (
+        <ThemeSheet
+          current={theme}
+          onClose={() => setSheet(null)}
+          onPick={async (id) => {
+            setTheme(id);
+            await supabase.rpc("update_room_settings", { p_room: room.id, p_settings: { theme: id } });
+          }}
+        />
+      )}
+      {sheet === "schedule" && (
+        <ScheduleSheet
+          options={scheduleOptions}
+          onClose={() => setSheet(null)}
+          onSave={async (at, track, label) => {
+            const s: ScheduledSong = { at: at.toISOString(), track, by: me.id, label };
+            setScheduled(s);
+            setSheet(null);
+            const { error } = await supabase.rpc("update_room_settings", { p_room: room.id, p_settings: { scheduled: s } });
+            if (error) {
+              setScheduled(null);
+              return showToast("Couldn't schedule that");
+            }
+            showToast(`⏰ Scheduled for ${at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
+          }}
+        />
+      )}
       {dedicating && partner && (
         <DedicateSheet
           track={dedicating}
