@@ -2,7 +2,13 @@ import "server-only";
 import { createHmac } from "node:crypto";
 
 export const USERNAME_RE = /^[a-z0-9_.]{3,20}$/;
-export const PIN_RE = /^\d{6}$/;
+export const PIN_LENGTH = 4;
+export const PIN_RE = /^\d{4}$/;
+
+/** PINs anyone would try first. */
+export function isWeakPin(pin: string) {
+  return /^(\d)\1{3}$/.test(pin) || ["1234", "4321", "0123", "1212", "2580", "6969", "1122"].includes(pin);
+}
 
 export function normalizeUsername(u: unknown) {
   return typeof u === "string" ? u.trim().toLowerCase() : "";
@@ -18,10 +24,17 @@ export function pinConfigured() {
 }
 
 /**
- * Turns a 6-digit PIN into the account's real Supabase password. Without the
+ * Turns a 4-digit PIN into the account's real Supabase password. Without the
  * server key, the PIN can't be tried directly against Supabase — so the only way
  * in is our login route, which enforces the 5-tries lockout.
  */
 export function pinToSecret(pin: string) {
   return createHmac("sha256", pepper()).update(`duet-pin:v1:${pin}`).digest("base64url");
+}
+
+export function waitText(seconds: number) {
+  const mins = Math.max(1, Math.ceil(seconds / 60));
+  if (mins < 60) return `${mins} min`;
+  const hrs = Math.round(mins / 60);
+  return `${hrs} ${hrs === 1 ? "hour" : "hours"}`;
 }

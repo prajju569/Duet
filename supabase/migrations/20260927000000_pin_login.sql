@@ -1,4 +1,4 @@
--- Duet — username + 6-digit PIN login
+-- Duet — Duet ID (username) + 4-digit PIN login
 -- Paste into Supabase → SQL Editor → Run (safe to run more than once).
 --
 -- The PIN itself is never stored. The server turns it into a long secret
@@ -23,7 +23,8 @@ create table if not exists public.pin_attempts (
 alter table public.pin_attempts enable row level security;
 
 -- Checks a username + derived secret. Returns the account email only when correct.
--- 5 wrong tries → locked for 15 minutes. Never raises, so the counter always saves.
+-- Every 5 wrong tries locks the ID, and each lock doubles: 15 min, 30 min, 1 h … max 24 h.
+-- A correct PIN resets everything. Never raises, so the counter always saves.
 create or replace function public.pin_login_check(p_username text, p_secret text)
 returns jsonb
 language plpgsql
@@ -35,6 +36,7 @@ declare
   v_attempt  public.pin_attempts;
   v_email    text;
   v_hash     text;
+  v_lock     interval;
 begin
   insert into public.pin_attempts (username) values (v_username) on conflict do nothing;
   select * into v_attempt from public.pin_attempts where username = v_username for update;
@@ -49,16 +51,14 @@ begin
   where p.username = v_username;
 
   if v_hash is null or v_hash = '' or extensions.crypt(p_secret, v_hash) <> v_hash then
-    update public.pin_attempts
-      set failures = failures + 1,
-          locked_until = case when failures + 1 >= 5 then now() + interval '15 minutes' else null end
-      where username = v_username
+    update public.pin_attempts set failures = failures + 1 where username = v_username
       returning * into v_attempt;
-    if v_attempt.locked_until is not null then
-      update public.pin_attempts set failures = 0 where username = v_username;
-      return jsonb_build_object('ok', false, 'error', 'LOCKED', 'retry_after', 900);
+    if v_attempt.failures % 5 = 0 then
+      v_lock := least(interval '15 minutes' * power(2, v_attempt.failures / 5 - 1), interval '24 hours');
+      update public.pin_attempts set locked_until = now() + v_lock where username = v_username;
+      return jsonb_build_object('ok', false, 'error', 'LOCKED', 'retry_after', ceil(extract(epoch from v_lock)));
     end if;
-    return jsonb_build_object('ok', false, 'error', 'INVALID', 'tries_left', 5 - v_attempt.failures);
+    return jsonb_build_object('ok', false, 'error', 'INVALID', 'tries_left', 5 - (v_attempt.failures % 5));
   end if;
 
   update public.pin_attempts set failures = 0, locked_until = null where username = v_username;

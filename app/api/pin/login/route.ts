@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { normalizeUsername, pinConfigured, pinToSecret, PIN_RE, USERNAME_RE } from "@/lib/pin";
+import { normalizeUsername, pinConfigured, pinToSecret, PIN_RE, USERNAME_RE, waitText } from "@/lib/pin";
 
 export async function POST(req: NextRequest) {
   if (!pinConfigured()) return NextResponse.json({ error: "PIN login isn't set up on the server yet." }, { status: 500 });
@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const username = normalizeUsername(body.username);
   const pin = typeof body.pin === "string" ? body.pin : "";
   if (!USERNAME_RE.test(username) || !PIN_RE.test(pin)) {
-    return NextResponse.json({ error: "Enter your username and 6-digit PIN." }, { status: 400 });
+    return NextResponse.json({ error: "Enter your Duet ID and 4-digit PIN." }, { status: 400 });
   }
 
   const supabase = await createClient();
@@ -22,12 +22,11 @@ export async function POST(req: NextRequest) {
   const result = data as { ok: boolean; error?: string; email?: string; retry_after?: number; tries_left?: number };
   if (!result.ok) {
     if (result.error === "LOCKED") {
-      const mins = Math.max(1, Math.ceil((result.retry_after ?? 900) / 60));
-      return NextResponse.json({ error: `Too many wrong tries. Try again in ${mins} min.` }, { status: 429 });
+      return NextResponse.json({ error: `Too many wrong tries. Try again in ${waitText(result.retry_after ?? 900)}.` }, { status: 429 });
     }
     const left = result.tries_left ?? 0;
     return NextResponse.json(
-      { error: `Wrong username or PIN.${left > 0 && left < 5 ? ` ${left} ${left === 1 ? "try" : "tries"} left.` : ""}` },
+      { error: `Wrong Duet ID or PIN.${left > 0 && left < 5 ? ` ${left} ${left === 1 ? "try" : "tries"} left.` : ""}` },
       { status: 401 },
     );
   }

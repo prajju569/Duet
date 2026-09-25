@@ -18,7 +18,7 @@ export function LoginForm({ next, error }: { next: string; error?: string }) {
   const [msg, setMsg] = useState<string | null>(error ? "That link expired or was already used — send a new one." : null);
 
   async function pinLogin(pinValue = pin) {
-    if (busy || pinValue.length !== 6 || !username.trim()) return;
+    if (busy || pinValue.length !== 4 || !username.trim()) return;
     setBusy(true);
     setMsg(null);
     const res = await fetch("/api/pin/login", {
@@ -80,7 +80,7 @@ export function LoginForm({ next, error }: { next: string; error?: string }) {
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
-              placeholder="username"
+              placeholder="Duet ID"
               autoComplete="username"
               autoCapitalize="none"
               autoCorrect="off"
@@ -89,7 +89,7 @@ export function LoginForm({ next, error }: { next: string; error?: string }) {
             />
             <PinInput value={pin} onChange={setPin} onComplete={(v) => void pinLogin(v)} />
             <button
-              disabled={busy || pin.length !== 6 || !username.trim()}
+              disabled={busy || pin.length !== 4 || !username.trim()}
               className="h-13 w-full rounded-2xl bg-cream font-semibold text-ink transition active:scale-[0.98] disabled:opacity-40"
             >
               {busy ? "Opening Duet…" : "Enter Duet"}
@@ -155,7 +155,7 @@ export function LoginForm({ next, error }: { next: string; error?: string }) {
               }}
               className="mt-2 w-full py-2 text-sm text-cream/55"
             >
-              ← Back to username &amp; PIN
+              ← Back to Duet ID &amp; PIN
             </button>
           </>
         )}

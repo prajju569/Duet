@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { PinInput } from "@/components/ui/PinInput";
 
-/** Pick a username + 6-digit PIN, so next time logging in takes two seconds. */
+/** Pick a Duet ID + 4-digit PIN, so next time logging in takes two seconds. */
 export function QuickLoginSetup({
   suggested,
   existingUsername,
@@ -54,11 +54,11 @@ export function QuickLoginSetup({
       <p className="font-display text-xl italic">{existingUsername ? "Change your PIN" : "Make logging in instant"}</p>
       <p className="mt-1 text-sm text-cream/60">
         {existingUsername
-          ? "Pick a new 6-digit PIN. Your username can change too."
-          : "Pick a username and a 6-digit PIN. Next time — on any phone — that's all you need. No emails."}
+          ? "Pick a new 4-digit PIN. Your Duet ID can change too."
+          : "Pick a Duet ID and a 4-digit PIN. Next time — on any phone — that's all you need. No emails."}
       </p>
 
-      <label className="mt-5 block text-xs tracking-wide text-cream/50 uppercase">Username</label>
+      <label className="mt-5 block text-xs tracking-wide text-cream/50 uppercase">Duet ID</label>
       <input
         value={username}
         onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 20))}
@@ -71,7 +71,7 @@ export function QuickLoginSetup({
       />
 
       <label className="mt-4 block text-xs tracking-wide text-cream/50 uppercase">
-        {step === "pick" ? "Choose a 6-digit PIN" : "Type it once more"}
+        {step === "pick" ? "Choose a 4-digit PIN" : "Type it once more"}
       </label>
       <div className="mt-1.5">
         {step === "pick" ? (
@@ -80,7 +80,7 @@ export function QuickLoginSetup({
             value={pin}
             onChange={setPin}
             onComplete={() => {
-              if (username.length < 3) return setMsg("Username needs at least 3 characters.");
+              if (username.length < 3) return setMsg("Duet ID needs at least 3 characters.");
               setMsg(null);
               setStep("confirm");
             }}
@@ -92,7 +92,7 @@ export function QuickLoginSetup({
 
       {busy && <p className="mt-3 text-sm text-cream/60">Saving…</p>}
       {msg && <p className="mt-3 text-sm text-rose-300">{msg}</p>}
-      <p className="mt-4 text-xs text-cream/40">Avoid 000000 / 123456. Forgot it later? Log in with an email code and set a new one.</p>
+      <p className="mt-4 text-xs text-cream/40">Avoid 0000 / 1234. Forgot it later? Log in with an email code and set a new one.</p>
 
       {onSkip && (
         <button onClick={onSkip} className="mt-3 text-sm text-cream/50 underline underline-offset-2">

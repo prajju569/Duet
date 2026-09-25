@@ -115,3 +115,27 @@ revoke execute on function public.invite_preview(text) from public;
 grant  execute on function public.invite_preview(text) to anon, authenticated;
 revoke execute on function public.redeem_invite(text) from public, anon;
 grant  execute on function public.redeem_invite(text) to authenticated;
+
+-- While holding a valid, unused invite: does this Duet ID already exist?
+-- (Only invite holders can ask, so IDs can't be fished for from the open internet.)
+create or replace function public.invite_username_exists(p_token text, p_username text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_inv public.room_invites;
+begin
+  select * into v_inv from public.room_invites
+  where token_hash = encode(extensions.digest(coalesce(p_token, ''), 'sha256'), 'hex');
+  if not found or v_inv.used_at is not null or v_inv.expires_at < now() then
+    return jsonb_build_object('ok', false);
+  end if;
+  return jsonb_build_object('ok', true, 'exists',
+    exists (select 1 from public.profiles where username = lower(trim(p_username))));
+end;
+$$;
+revoke execute on function public.invite_username_exists(text, text) from public;
+grant  execute on function public.invite_username_exists(text, text) to anon, authenticated;

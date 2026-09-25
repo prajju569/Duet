@@ -49,7 +49,7 @@ export function HomeClient({
     setBusy(false);
     if (error) return setMsg(error.message);
     setEditingName(false);
-    // First time: set up username + PIN before heading on (it's skippable).
+    // First time: set up Duet ID + PIN before heading on (it's skippable).
     if (next && myUsername) router.push(next);
     else router.refresh();
   }
@@ -118,7 +118,7 @@ export function HomeClient({
                 </>
               )}
             </p>
-            {myUsername && !pinOpen && <p className="mt-1 text-xs text-cream/35">Log in anywhere as <b>{myUsername}</b> + your PIN</p>}
+            {myUsername && !pinOpen && <p className="mt-1 text-xs text-cream/35">Your Duet ID: <b>{myUsername}</b> + your PIN</p>}
 
             {pinOpen && (
               <QuickLoginSetup

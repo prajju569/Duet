@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { JoinButton } from "./JoinButton";
+import { InviteJoin } from "./InviteJoin";
 
 type Preview = { status: "ok" | "used" | "expired" | "invalid"; from?: string; to?: string; used_by_me?: boolean };
 
@@ -30,11 +30,18 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const { token } = await params;
   const p = await getPreview(token);
 
+  const supabase = await createClient();
   // Tapping your own (already used) link again just opens the room.
   if (p.status === "used" && p.used_by_me) {
-    const supabase = await createClient();
     const { data: code } = await supabase.rpc("redeem_invite", { p_token: token });
     if (code) redirect(`/room/${code}`);
+  }
+  // Already signed in on this phone? Offer "Join as …".
+  const { data: { user } } = await supabase.auth.getUser();
+  let signedInAs: string | null = null;
+  if (user) {
+    const { data: me } = await supabase.from("profiles").select("display_name, username").eq("id", user.id).maybeSingle();
+    signedInAs = me?.username ?? me?.display_name ?? "yourself";
   }
 
   return (
@@ -48,8 +55,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             <p className="mt-8 text-cream/60">Hey {p.to} 👋</p>
             <h1 className="mt-2 font-display text-4xl leading-tight italic">{p.from} made a room for you two</h1>
             <p className="mt-4 text-cream/65">Chat, and listen to the same song — at the same second.</p>
-            <JoinButton token={token} from={p.from ?? "them"} />
-            <p className="mt-4 text-xs text-cream/40">No sign-up needed. You can pick a username + PIN later.</p>
+            <InviteJoin token={token} from={p.from ?? "them"} signedInAs={signedInAs} />
           </>
         ) : (
           <>
@@ -58,7 +64,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             </h1>
             <p className="mt-4 text-cream/65">
               {p.status === "used"
-                ? "If that was you on another phone, log in with your username + PIN."
+                ? "If that was you on another phone, log in with your Duet ID + PIN."
                 : "Ask for a fresh invite link — they only last 7 days."}
             </p>
             <Link href="/login" className="mt-8 inline-flex h-13 items-center rounded-2xl bg-cream px-8 font-semibold text-ink">
