@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import type { usePlaybackSync } from "@/hooks/usePlaybackSync";
 import type { Favourite, QueueItem, Track } from "@/lib/types";
-import { formatTime, possessive } from "@/lib/format";
+import { possessive } from "@/lib/format";
+import { thumbUrl } from "@/lib/youtube";
 import { Avatar } from "@/components/ui/Avatar";
 import {
   ChevronDown,
@@ -56,6 +57,7 @@ export function PlayerPanel(props: Props) {
   const isDesktop = useIsDesktop();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("queue");
+  const [artFailed, setArtFailed] = useState<string | null>(null);
   const expanded = open || isDesktop;
 
   const current: Track | null = s?.videoId
@@ -104,28 +106,40 @@ export function PlayerPanel(props: Props) {
       </div>
 
       <div className={expanded ? "px-5 pt-3 lg:px-8 lg:pt-8" : "flex items-center gap-3 p-2"}>
-        {/* Video / album art */}
+        {/* Album art. The YouTube player still runs underneath (it has to stay on
+            screen to keep playing) but is fully covered — audio only, no video. */}
         <div
           className={
             expanded
-              ? "relative mx-auto aspect-video w-full overflow-hidden rounded-3xl bg-black/40 shadow-[0_30px_80px_-20px_var(--c1)] ring-1 ring-white/10"
-              : "relative aspect-video w-24 shrink-0 overflow-hidden rounded-xl bg-black/40"
+              ? "relative mx-auto aspect-square w-full max-w-[min(340px,72vw)] overflow-hidden rounded-[2rem] bg-black/40 shadow-[0_30px_80px_-20px_var(--c1)] ring-1 ring-white/10 lg:max-w-[380px]"
+              : "relative aspect-square w-14 shrink-0 overflow-hidden rounded-xl bg-black/40"
           }
           onClick={() => !expanded && setOpen(true)}
         >
           <div ref={player.hostRef} className="absolute inset-0 [&_iframe]:h-full [&_iframe]:w-full" />
-          {!s?.videoId && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center text-cream/50">
-              <span className={expanded ? "text-4xl" : "text-xl"}>🎶</span>
-              {expanded && <span className="text-sm">Search a song to start your duet</span>}
+          {s?.videoId && artFailed !== s.videoId ? (
+            // hqdefault has black bars top & bottom; scaling crops them for a clean square.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={thumbUrl(s.videoId, "hq")}
+              alt=""
+              onError={() => setArtFailed(s.videoId)}
+              className={`pointer-events-none absolute inset-0 h-full w-full scale-[1.34] object-cover transition duration-700 ${
+                s.isPlaying ? "" : "brightness-75 saturate-50"
+              }`}
+            />
+          ) : (
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 bg-[#1d1419] text-center text-cream/50">
+              <span className={expanded ? "text-5xl" : "text-xl"}>🎶</span>
+              {expanded && <span className="px-6 text-sm">Search a song to start your duet</span>}
             </div>
           )}
-          {/* Shield: stops taps from controlling YouTube directly (which would desync).
-              Dropped when an iPhone insists on a tap inside the video. */}
+          {/* Shield: stops taps from reaching YouTube (which would desync). Dropped when an
+              iPhone insists on one tap inside the player — the tap passes through the art. */}
           <div className={player.needsTap ? "pointer-events-none absolute inset-0" : "absolute inset-0"} />
-          {player.needsTap && expanded && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 p-3 text-center text-xs text-cream">
-              Tap the video once to start sound on this phone
+          {player.needsTap && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 p-3 text-center text-xs font-medium text-cream">
+              {expanded ? "Tap here once to start sound on this phone" : "Tap"}
             </div>
           )}
         </div>

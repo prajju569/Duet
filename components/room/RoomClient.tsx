@@ -13,6 +13,31 @@ import { ChatPanel } from "./ChatPanel";
 import { TopBar } from "./TopBar";
 import { JoinOverlay } from "./JoinOverlay";
 
+/**
+ * iOS keeps the page height when the keyboard opens and scrolls the whole page up,
+ * pushing the mini player off-screen. Pin the app to the *visible* area instead so
+ * the player stays on top and the composer sits right above the keyboard.
+ */
+function useVisualViewportHeight() {
+  const [h, setH] = useState<number | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      setH(Math.round(vv.height));
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+  return h;
+}
+
 type Props = {
   room: { id: string; code: string; name: string };
   me: { id: string; name: string };
@@ -58,6 +83,7 @@ export function RoomClient({ room, me, initialMembers }: Props) {
     void roomChannelRef.current?.send({ type: "broadcast", event: "playback", payload: s });
   }, []);
 
+  const appHeight = useVisualViewportHeight();
   const player = usePlaybackSync({ roomId: room.id, meId: me.id, broadcast: broadcastPlayback, onError: showToast });
 
   // ── Data loading ───────────────────────────────────────────────────
@@ -278,7 +304,7 @@ export function RoomClient({ room, me, initialMembers }: Props) {
 
   // ── Chat actions ───────────────────────────────────────────────────
   const sendMessage = useCallback(
-    async (body: string) => {
+    async (body: string, replyTo: string | null = null) => {
       const text = body.trim();
       if (!text) return;
       const msg: Message = {
@@ -288,18 +314,20 @@ export function RoomClient({ room, me, initialMembers }: Props) {
         kind: "text",
         body: text,
         created_at: new Date().toISOString(),
+        reply_to: replyTo,
         pending: true,
       };
       setMessages((prev) => [...prev, msg]);
       const { data, error } = await supabase
         .from("messages")
-        .insert({ id: msg.id, room_id: room.id, user_id: me.id, body: text })
+        // reply_to only sent when replying, so plain messages work even before the reply migration.
+        .insert({ id: msg.id, room_id: room.id, user_id: me.id, body: text, ...(replyTo ? { reply_to: replyTo } : {}) })
         .select()
         .single();
       setMessages((prev) =>
         prev.map((m) => (m.id === msg.id ? (error ? { ...m, pending: false, failed: true } : (data as Message)) : m)),
       );
-      if (error) showToast("Message didn't send");
+      if (error) showToast(replyTo && /reply_to/.test(error.message) ? "Replies need the new database update (see README)" : "Message didn't send");
     },
     [supabase, room.id, me.id, showToast],
   );
@@ -411,7 +439,7 @@ export function RoomClient({ room, me, initialMembers }: Props) {
   );
 
   return (
-    <div className="duet-bg relative h-dvh overflow-hidden text-cream" style={style} data-playing={player.state?.isPlaying ? "" : undefined}>
+    <div className="duet-bg relative h-dvh overflow-hidden text-cream" style={{ ...style, ...(appHeight ? { height: appHeight } : {}) }} data-playing={player.state?.isPlaying ? "" : undefined}>
       <div className="relative z-10 flex h-full flex-col lg:flex-row">
         <div className="lg:hidden">{topBar}</div>
         <PlayerPanel

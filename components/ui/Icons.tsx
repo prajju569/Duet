@@ -66,3 +66,6 @@ export const ClockIcon = ({ size, ...p }: P) => (
 export const BackIcon = ({ size, ...p }: P) => (
   <svg {...base(size)} {...p}><path d="m15 18-6-6 6-6" /></svg>
 );
+export const ReplyIcon = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+);

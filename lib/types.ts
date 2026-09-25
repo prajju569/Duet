@@ -33,6 +33,7 @@ export type Message = {
   kind: "text" | "system";
   body: string;
   created_at: string;
+  reply_to?: string | null;
   pending?: boolean;
   failed?: boolean;
 };

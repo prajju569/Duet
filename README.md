@@ -6,7 +6,8 @@ A private room for two. You chat in real time **and** listen to the same YouTube
 - **Music in sync.** Search YouTube, tap a song, and it starts for both of you. Whoever pressed last is in control.
 - **Shared queue.** Both of you can add songs, and each one shows whose pick it was ("Prajwal's pick").
 - **Favourites.** Heart a song and you can play it again with one tap.
-- **Chat.** Typing indicator, seen ticks (✓✓), and long-press or double-tap a message to react. Every song change posts a note in the chat ("🎵 Prajwal played Kesariya").
+- **Audio-first.** You see big album art, not the music video.
+- **Chat.** Typing indicator, seen ticks (✓✓), and long-press or double-tap a message to react. **Swipe a message right to reply** (on a computer, right-click → ↩). A **↓ arrow** jumps back to the newest message and shows how many you missed. Every song change posts a note in the chat ("🎵 Prajwal played Kesariya").
 - **Presence.** See whether the other person is online, offline or listening now. If one of you leaves, the music keeps playing for the other. When you come back, you rejoin at the right spot.
 - **Looks.** Dark and warm. The background colour follows the current song's thumbnail. Built for phones first.
 
@@ -26,6 +27,8 @@ You'll create three free accounts: **Supabase** (database and login), **Google C
 5. Go to **Project Settings → API** (or click the **Connect** button at the top). Copy these two values into a note:
    - **Project URL**, which looks like `https://abcd1234.supabase.co`
    - **anon public** key (it may be called the **publishable** key), a long string
+
+> **Already set up before replies existed?** Run `supabase/migrations/20260926000000_message_replies.sql` in the SQL Editor once. It's safe to run twice.
 
 ### Step 2: Make login emails work on phones (recommended)
 
