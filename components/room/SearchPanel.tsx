@@ -7,6 +7,7 @@ import { HeartIcon, PlusIcon, SearchIcon } from "@/components/ui/Icons";
 import { IconButton, TrackRow } from "./TrackRow";
 
 type Props = {
+  onDedicate?: (t: Track) => void;
   isFavourite: (videoId: string) => boolean;
   onPlay: (t: Track) => void;
   onQueue: (t: Track) => void;
@@ -18,7 +19,7 @@ type Props = {
 let lastQuery = "";
 let lastResults: Track[] = [];
 
-export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, onError }: Props) {
+export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, onError, onDedicate }: Props) {
   const [q, setQ] = useState(lastQuery);
   const [results, setResults] = useState<Track[]>(lastResults);
   const [loading, setLoading] = useState(false);
@@ -87,6 +88,11 @@ export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, o
                 <IconButton onClick={() => onQueue(t)} label="Add to queue">
                   <PlusIcon size={17} />
                 </IconButton>
+                {onDedicate && (
+                  <IconButton onClick={() => onDedicate(t)} label="Dedicate">
+                    <span className="text-[15px] leading-none">💌</span>
+                  </IconButton>
+                )}
                 <IconButton onClick={() => onToggleFavourite(t)} label="Favourite" active={isFavourite(t.videoId)}>
                   <HeartIcon size={16} filled={isFavourite(t.videoId)} />
                 </IconButton>

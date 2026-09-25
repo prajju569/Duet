@@ -350,7 +350,7 @@ export function usePlaybackSync({ roomId, meId, initial = null, broadcast, onErr
   }, [serverNow]);
 
   const playTrack = useCallback(
-    (t: Track, addedBy: string = meId) =>
+    (t: Track, addedBy: string = meId, startSec = 0) =>
       commit({
         videoId: t.videoId,
         title: t.title,
@@ -359,7 +359,7 @@ export function usePlaybackSync({ roomId, meId, initial = null, broadcast, onErr
         durationSec: t.durationSec,
         addedBy,
         isPlaying: true,
-        positionSec: 0,
+        positionSec: Math.max(0, startSec),
       }),
     [commit, meId],
   );

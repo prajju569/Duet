@@ -26,6 +26,9 @@ type Player = ReturnType<typeof usePlaybackSync>;
 
 type Props = {
   roomName: string;
+  v2?: boolean;
+  onShareMoment?: () => void;
+  onDedicate?: (t: Track) => void;
   player: Player;
   queue: QueueItem[];
   favourites: Favourite[];
@@ -188,6 +191,24 @@ export function PlayerPanel(props: Props) {
           <div className="mt-4">
             <SeekBar getPosition={player.getPosition} duration={s?.durationSec ?? null} isPlaying={!!s?.isPlaying} disabled={!s?.videoId} onSeek={player.seek} />
             <VolumeRow volume={player.volume} onChange={player.setVolume} />
+            {props.v2 && current && (
+              <div className="mt-3 flex justify-center gap-2">
+                <button
+                  onClick={props.onShareMoment}
+                  className="rounded-full bg-white/8 px-3.5 py-1.5 text-[13px] font-medium text-cream/85 ring-1 ring-white/10 active:scale-95"
+                >
+                  💬 Share this moment
+                </button>
+                {props.onDedicate && (
+                  <button
+                    onClick={() => props.onDedicate!(current)}
+                    className="rounded-full bg-white/8 px-3.5 py-1.5 text-[13px] font-medium text-cream/85 ring-1 ring-white/10 active:scale-95"
+                  >
+                    💌 Dedicate
+                  </button>
+                )}
+              </div>
+            )}
             <div className="mt-3 flex items-center justify-center gap-8">
               <button onClick={() => player.seek(0)} disabled={!s?.videoId} className="rounded-full p-3 text-cream/80 transition active:scale-90 disabled:opacity-30" aria-label="Restart">
                 <RestartIcon size={24} />
@@ -240,6 +261,7 @@ export function PlayerPanel(props: Props) {
             )}
             {tab === "search" && (
               <SearchPanel
+                onDedicate={props.v2 ? props.onDedicate : undefined}
                 isFavourite={isFavourite}
                 onPlay={(t) => player.playTrack(t)}
                 onQueue={props.onAddToQueue}

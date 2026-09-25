@@ -6,9 +6,9 @@ import { getSupabase } from "@/lib/supabase/client";
 import { usePlaybackSync } from "@/hooks/usePlaybackSync";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { DEFAULT_PALETTE, paletteForVideo, type Palette } from "@/lib/colors";
-import { firstName } from "@/lib/format";
+import { firstName, formatTime } from "@/lib/format";
 import { fromRow, type PlaybackRow } from "@/lib/sync";
-import type { Favourite, Member, Message, PlaybackState, PresenceInfo, QueueItem, Reaction, Track } from "@/lib/types";
+import type { Favourite, Member, Message, MessageMeta, PlaybackState, PresenceInfo, QueueItem, Reaction, Track } from "@/lib/types";
 import { PlayerPanel } from "./PlayerPanel";
 import { ChatPanel } from "./ChatPanel";
 import { TopBar } from "./TopBar";
@@ -17,6 +17,7 @@ import { InviteSheet } from "./InviteSheet";
 import { QuickLoginSetup } from "@/components/QuickLoginSetup";
 import { RenameSheet } from "@/components/RoomsList";
 import { useEmojiBurst } from "./EmojiBurst";
+import { DedicateSheet } from "./DedicateSheet";
 import type { Features } from "@/lib/features";
 
 type ConnectionView = "ok" | "offline" | "reconnecting" | "restored";
@@ -397,6 +398,10 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           const m = row as Message;
           setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev.map((x) => (x.id === m.id ? m : x)) : [...prev, m]));
         })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter }, ({ new: row }) => {
+          const m = row as Message;
+          if (m?.id) setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...m, pending: false } : x)));
+        })
         .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions", filter }, ({ new: row }) => {
           const r = row as Reaction;
           if (r?.message_id) setReactions((prev) => ({ ...prev, [`${r.message_id}:${r.user_id}`]: r }));
@@ -487,14 +492,15 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
 
   // ── Chat actions ───────────────────────────────────────────────────
   const sendMessage = useCallback(
-    async (body: string, replyTo: string | null = null) => {
+    async (body: string, replyTo: string | null = null, extra?: { kind: Message["kind"]; meta: MessageMeta }) => {
       const text = body.trim();
       if (!text) return;
       const msg: Message = {
         id: crypto.randomUUID(),
         room_id: room.id,
         user_id: me.id,
-        kind: "text",
+        kind: extra?.kind ?? "text",
+        meta: extra?.meta ?? null,
         body: text,
         created_at: new Date().toISOString(),
         reply_to: replyTo,
@@ -504,7 +510,14 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       const { data, error } = await supabase
         .from("messages")
         // reply_to only sent when replying, so plain messages work even before the reply migration.
-        .insert({ id: msg.id, room_id: room.id, user_id: me.id, body: text, ...(replyTo ? { reply_to: replyTo } : {}) })
+        .insert({
+          id: msg.id,
+          room_id: room.id,
+          user_id: me.id,
+          body: text,
+          ...(replyTo ? { reply_to: replyTo } : {}),
+          ...(extra ? { kind: extra.kind, meta: extra.meta } : {}),
+        })
         .select()
         .single();
       setMessages((prev) =>
@@ -513,6 +526,81 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       if (error) showToast(replyTo && /reply_to/.test(error.message) ? "Replies need the new database update (see README)" : "Message didn't send");
     },
     [supabase, room.id, me.id, showToast],
+  );
+
+  // ── v2 chat extras ─────────────────────────────────────────────────
+  const replaceMessage = useCallback((m: Message) => setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x))), []);
+
+  const editMessage = useCallback(
+    async (id: string, body: string) => {
+      const text = body.trim();
+      if (!text) return;
+      setMessages((prev) => prev.map((x) => (x.id === id ? { ...x, body: text, edited_at: new Date().toISOString() } : x)));
+      const { data, error } = await supabase.rpc("edit_message", { p_id: id, p_body: text });
+      if (error) {
+        showToast(error.message.includes("TOO_OLD") ? "Messages can only be edited for 24 hours" : "Couldn't edit that");
+        return void loadMessages();
+      }
+      replaceMessage(data as Message);
+    },
+    [supabase, showToast, replaceMessage, loadMessages],
+  );
+
+  const unsendMessage = useCallback(
+    async (id: string) => {
+      setMessages((prev) => prev.map((x) => (x.id === id ? { ...x, body: "Message deleted", meta: null, deleted_at: new Date().toISOString() } : x)));
+      const { data, error } = await supabase.rpc("delete_message", { p_id: id });
+      if (error) {
+        showToast("Couldn't unsend that");
+        return void loadMessages();
+      }
+      replaceMessage(data as Message);
+    },
+    [supabase, showToast, replaceMessage, loadMessages],
+  );
+
+  const sendSticker = useCallback((emoji: string) => sendMessage(emoji, null, { kind: "sticker", meta: { sticker: emoji } }), [sendMessage]);
+
+  const shareMoment = useCallback(() => {
+    const s = player.state;
+    if (!s?.videoId) return;
+    const at = Math.floor(player.getPosition());
+    void sendMessage(`🎵 ${s.title ?? "This song"} · ${formatTime(at)}`, null, {
+      kind: "moment",
+      meta: { videoId: s.videoId, title: s.title ?? "", channel: s.channel, thumbnail: s.thumbnail, durationSec: s.durationSec, at },
+    });
+    showToast("Moment shared in chat 💬");
+  }, [player, sendMessage, showToast]);
+
+  const [dedicating, setDedicating] = useState<Track | null>(null);
+  const sendDedication = useCallback(
+    (t: Track, note: string) => {
+      void sendMessage(`💌 ${t.title}`, null, {
+        kind: "dedication",
+        meta: { videoId: t.videoId, title: t.title, channel: t.channel, thumbnail: t.thumbnail, durationSec: t.durationSec, note: note.trim().slice(0, 280) },
+      });
+      setDedicating(null);
+    },
+    [sendMessage],
+  );
+
+  /** ▶ on a moment / dedication card: play that song for both of you. */
+  const playFromMessage = useCallback(
+    (m: Message) => {
+      const meta = m.meta;
+      if (!meta?.videoId) return;
+      const track: Track = {
+        videoId: meta.videoId,
+        title: meta.title ?? "",
+        channel: meta.channel ?? null,
+        thumbnail: meta.thumbnail ?? null,
+        durationSec: meta.durationSec ?? null,
+      };
+      const at = m.kind === "moment" ? (meta.at ?? 0) : 0;
+      if (player.state?.videoId === meta.videoId && m.kind === "moment") return player.seek(at);
+      void player.playTrack(track, m.user_id ?? me.id, at);
+    },
+    [player, me.id],
   );
 
   const lastTypingSent = useRef(0);
@@ -633,6 +721,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         <div className="lg:hidden">{topBar}</div>
         <PlayerPanel
           roomName={roomName}
+          v2={features.v2}
+          onShareMoment={shareMoment}
+          onDedicate={partner ? setDedicating : undefined}
           player={player}
           queue={queue}
           favourites={favourites}
@@ -657,6 +748,11 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onSend={sendMessage}
           onTyping={sendTyping}
           onBurst={sendBurst}
+          v2={features.v2}
+          onEdit={editMessage}
+          onUnsend={unsendMessage}
+          onSticker={sendSticker}
+          onPlayFromMessage={playFromMessage}
           onReact={react}
           onSeen={markRead}
           notice={
@@ -691,6 +787,14 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       )}
 
       <ConnectionBanner view={connection} />
+      {dedicating && partner && (
+        <DedicateSheet
+          track={dedicating}
+          partnerName={firstName(partner.name)}
+          onClose={() => setDedicating(null)}
+          onSend={(note) => sendDedication(dedicating, note)}
+        />
+      )}
       {burst.layer}
 
       {renameOpen && (

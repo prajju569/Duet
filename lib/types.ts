@@ -30,10 +30,13 @@ export type Message = {
   id: string;
   room_id: string;
   user_id: string | null;
-  kind: "text" | "system";
+  kind: "text" | "system" | "sticker" | "image" | "voice" | "moment" | "dedication";
   body: string;
   created_at: string;
   reply_to?: string | null;
+  meta?: MessageMeta | null;
+  edited_at?: string | null;
+  deleted_at?: string | null;
   pending?: boolean;
   failed?: boolean;
 };
@@ -73,4 +76,23 @@ export type PresenceInfo = {
   userId: string;
   name: string;
   listening: boolean;
+};
+
+/** Extra data carried by non-text messages. */
+export type MessageMeta = {
+  sticker?: string;
+  // moment + dedication: the song
+  videoId?: string;
+  title?: string;
+  channel?: string | null;
+  thumbnail?: string | null;
+  durationSec?: number | null;
+  at?: number; // moment: seconds into the song
+  note?: string; // dedication
+  // image + voice
+  path?: string;
+  width?: number;
+  height?: number;
+  seconds?: number;
+  mime?: string;
 };

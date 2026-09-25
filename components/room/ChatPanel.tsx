@@ -5,6 +5,13 @@ import type { Member, Message, Reaction } from "@/lib/types";
 import { clockTime, dayLabel, firstName } from "@/lib/format";
 import { parseTimestamp } from "@/lib/sync";
 import { BURST_EMOJIS } from "./EmojiBurst";
+import { thumbUrl } from "@/lib/youtube";
+import { formatTime } from "@/lib/format";
+
+const STICKERS = ["🥰", "😘", "🤗", "🥺", "😭", "😂", "🤭", "🙈", "😴", "😤", "🫶", "🫂", "💞", "💌", "🌹", "🌙", "☕", "🍫", "🎧", "🎶", "💃", "🕺", "✨", "🔥"];
+
+const canEditMsg = (m: Message) =>
+  m.kind === "text" && !m.deleted_at && !m.pending && Date.now() - new Date(m.created_at).getTime() < 24 * 3600 * 1000;
 import { ChevronDown, ClockIcon, CheckIcon, DoubleCheckIcon, ReplyIcon, SendIcon, XIcon } from "@/components/ui/Icons";
 
 const EMOJIS = ["❤️", "😂", "🥹", "😮", "🔥", "👍"];
@@ -30,6 +37,12 @@ type Props = {
   notice?: React.ReactNode;
   /** Send a floating-emoji burst to both screens. */
   onBurst: (emoji: string) => void;
+  /** Database v2 features available (edit/unsend, stickers, cards). */
+  v2?: boolean;
+  onEdit?: (id: string, body: string) => void;
+  onUnsend?: (id: string) => void;
+  onSticker?: (emoji: string) => void;
+  onPlayFromMessage?: (m: Message) => void;
 };
 
 export function ChatPanel(props: Props) {
@@ -40,6 +53,8 @@ export function ChatPanel(props: Props) {
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
+  const [stickers, setStickers] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
   const [unseenBelow, setUnseenBelow] = useState(0);
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -94,9 +109,23 @@ export function ChatPanel(props: Props) {
     inputRef.current?.focus();
   }
 
+  function startEdit(m: Message) {
+    setEditing(m);
+    setReplyTo(null);
+    setPickerFor(null);
+    setText(m.body);
+    inputRef.current?.focus();
+  }
+
   function submit(e?: React.FormEvent) {
     e?.preventDefault();
     if (!text.trim()) return;
+    if (editing) {
+      if (text.trim() !== editing.body) props.onEdit?.(editing.id, text);
+      setEditing(null);
+      setText("");
+      return;
+    }
     props.onSend(text, replyTo?.id ?? null);
     props.onTyping(false);
     setText("");
@@ -188,6 +217,16 @@ export function ChatPanel(props: Props) {
                 pickerOpen={pickerFor === m.id}
                 onOpenPicker={() => setPickerFor(m.id)}
                 onReply={() => startReply(m)}
+                onEdit={props.v2 && mine && canEditMsg(m) ? () => startEdit(m) : undefined}
+                onUnsend={
+                  props.v2 && mine && !m.deleted_at && !m.pending
+                    ? () => {
+                        setPickerFor(null);
+                        if (confirm("Unsend this message for both of you?")) props.onUnsend?.(m.id);
+                      }
+                    : undefined
+                }
+                onPlay={props.onPlayFromMessage ? () => props.onPlayFromMessage!(m) : undefined}
                 onReact={(emoji) => {
                   props.onReact(m.id, emoji);
                   setPickerFor(null);
@@ -228,6 +267,42 @@ export function ChatPanel(props: Props) {
 
       <div className="px-3 pt-1 pb-[max(env(safe-area-inset-bottom),12px)] lg:px-6 lg:pb-5">
         {props.notice}
+        {editing && (
+          <div className="animate-rise mb-2 flex items-center gap-3 rounded-2xl bg-white/7 py-2 pr-2 pl-3 ring-1 ring-white/10">
+            <div className="min-w-0 flex-1 border-l-2 border-sky-300 pl-2.5">
+              <div className="text-xs font-semibold text-sky-200">Editing message</div>
+              <div className="truncate text-[13px] text-cream/70">{editing.body}</div>
+            </div>
+            <button
+              onClick={() => {
+                setEditing(null);
+                setText("");
+              }}
+              aria-label="Cancel edit"
+              className="rounded-full p-1.5 text-cream/60 hover:bg-white/10"
+            >
+              <XIcon size={16} />
+            </button>
+          </div>
+        )}
+        {stickers && (
+          <div className="animate-rise mb-2 grid grid-cols-8 gap-1 rounded-2xl bg-zinc-900/90 p-2 ring-1 ring-white/10">
+            {STICKERS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => {
+                  props.onSticker?.(s);
+                  setStickers(false);
+                }}
+                className="flex aspect-square items-center justify-center rounded-xl text-3xl transition hover:bg-white/10 active:scale-90"
+                aria-label={`Send ${s} sticker`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
         {replyTo && (
           <div className="animate-rise mb-2 flex items-center gap-3 rounded-2xl bg-white/7 py-2 pr-2 pl-3 ring-1 ring-white/10">
             <div className="min-w-0 flex-1 border-l-2 border-rose-300 pl-2.5">
@@ -243,6 +318,16 @@ export function ChatPanel(props: Props) {
         )}
         <form onSubmit={submit} className="flex items-end gap-2">
           <BurstButton onBurst={props.onBurst} />
+          {props.v2 && (
+            <button
+              type="button"
+              onClick={() => setStickers((v) => !v)}
+              aria-label="Stickers"
+              className={`flex size-11 shrink-0 items-center justify-center rounded-full text-xl ring-1 ring-white/10 transition active:scale-90 ${stickers ? "bg-white/20" : "bg-white/8"}`}
+            >
+              😊
+            </button>
+          )}
           <textarea
             ref={inputRef}
             value={text}
@@ -253,7 +338,13 @@ export function ChatPanel(props: Props) {
             }}
             onBlur={() => props.onTyping(false)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") setReplyTo(null);
+              if (e.key === "Escape") {
+                setReplyTo(null);
+                if (editing) {
+                  setEditing(null);
+                  setText("");
+                }
+              }
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 submit();
@@ -294,6 +385,9 @@ type BubbleProps = {
   onOpenPicker: () => void;
   onReply: () => void;
   onReact: (emoji: string) => void;
+  onEdit?: () => void;
+  onUnsend?: () => void;
+  onPlay?: () => void;
 };
 
 function Bubble({
@@ -313,6 +407,9 @@ function Bubble({
   onOpenPicker,
   onReply,
   onReact,
+  onEdit,
+  onUnsend,
+  onPlay,
 }: BubbleProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -426,17 +523,29 @@ function Bubble({
             <button onClick={onReply} aria-label="Reply" className="flex size-9 items-center justify-center rounded-full text-cream/80 hover:bg-white/10">
               <ReplyIcon size={17} />
             </button>
+            {onEdit && (
+              <button onClick={onEdit} aria-label="Edit" className="flex size-9 items-center justify-center rounded-full text-base hover:bg-white/10">
+                ✏️
+              </button>
+            )}
+            {onUnsend && (
+              <button onClick={onUnsend} aria-label="Unsend" className="flex size-9 items-center justify-center rounded-full text-base hover:bg-white/10">
+                🗑️
+              </button>
+            )}
           </div>
         )}
         <div
           {...handlers}
           style={{ WebkitTouchCallout: "none", touchAction: "pan-y" }}
-          className={`relative px-3.5 py-2 text-[15px] leading-snug break-words whitespace-pre-wrap transition-[transform,box-shadow] duration-200 select-none ${
+          className={`relative text-[15px] leading-snug break-words whitespace-pre-wrap transition-[transform,box-shadow] duration-200 select-none ${
             pressing ? "scale-[0.97]" : ""
           } ${flash ? "ring-2 ring-rose-300" : ""} ${
-            mine
+            m.kind === "sticker" && !m.deleted_at
+              ? "rounded-3xl px-1 py-0.5"
+              : `px-3.5 py-2 ${mine
               ? `bg-gradient-to-br from-rose-300 to-orange-200 text-ink ${tail ? "rounded-3xl rounded-br-md" : "rounded-3xl"}`
-              : `bg-white/10 text-cream ring-1 ring-white/5 backdrop-blur ${tail ? "rounded-3xl rounded-bl-md" : "rounded-3xl"}`
+              : `bg-white/10 text-cream ring-1 ring-white/5 backdrop-blur ${tail ? "rounded-3xl rounded-bl-md" : "rounded-3xl"}`}`
           } ${m.failed ? "opacity-60" : ""}`}
         >
           {quote && (
@@ -452,8 +561,12 @@ function Bubble({
               <span className={`line-clamp-2 text-[13px] ${mine ? "text-ink/70" : "text-cream/65"}`}>{quote.message ? quote.message.body : "Earlier message"}</span>
             </button>
           )}
-          {m.body}
-          <span className={`ml-2 inline-flex translate-y-[3px] items-center gap-0.5 align-baseline text-[10px] ${mine ? "text-ink/55" : "text-cream/40"}`}>
+          <MessageBody m={m} mine={mine} authorName={authorName} onPlay={onPlay} />
+          <span
+            className={`ml-2 inline-flex translate-y-[3px] items-center gap-0.5 align-baseline text-[10px] ${
+              mine && !(m.kind === "sticker" && !m.deleted_at) ? "text-ink/55" : "text-cream/40"
+            }`}
+          >
             {clockTime(m.created_at)}
             {mine &&
               (m.failed ? (
@@ -532,5 +645,59 @@ function BurstButton({ onBurst }: { onBurst: (emoji: string) => void }) {
         ❤️
       </button>
     </div>
+  );
+}
+
+/** What's inside a bubble, by message kind. */
+function MessageBody({ m, mine, authorName, onPlay }: { m: Message; mine: boolean; authorName: string; onPlay?: () => void }) {
+  if (m.deleted_at) return <span className="italic opacity-60">🚫 Message deleted</span>;
+  const meta = m.meta ?? {};
+  const stop = (e: React.PointerEvent) => e.stopPropagation();
+
+  if (m.kind === "sticker") {
+    return <span className="inline-block text-6xl leading-none drop-shadow-lg">{meta.sticker ?? m.body}</span>;
+  }
+
+  if ((m.kind === "moment" || m.kind === "dedication") && meta.videoId) {
+    const isMoment = m.kind === "moment";
+    return (
+      <span className="block w-60 max-w-full whitespace-normal">
+        <span className={`mb-1.5 block text-[11.5px] font-semibold tracking-wide uppercase ${mine ? "text-ink/60" : "text-rose-200/90"}`}>
+          {isMoment ? "🎵 A moment in the song" : `💌 ${mine ? "You" : authorName} dedicated a song`}
+        </span>
+        <span className="flex items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={thumbUrl(meta.videoId)} alt="" className="h-11 w-[4.4rem] shrink-0 rounded-lg bg-white/10 object-cover" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+          <span className="min-w-0">
+            <span className="line-clamp-2 block text-[14px] leading-snug font-semibold">{meta.title}</span>
+            <span className={`block text-xs ${mine ? "text-ink/60" : "text-cream/55"}`}>
+              {isMoment ? `at ${formatTime(meta.at ?? 0)}` : meta.channel}
+            </span>
+          </span>
+        </span>
+        {!isMoment && meta.note && (
+          <span className={`mt-2 block font-display text-[15px] leading-snug italic ${mine ? "text-ink/85" : "text-cream/90"}`}>“{meta.note}”</span>
+        )}
+        {onPlay && (
+          <button
+            type="button"
+            onPointerDown={stop}
+            onClick={onPlay}
+            className={`mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-semibold ${
+              mine ? "bg-ink/12 text-ink" : "bg-white/12 text-cream"
+            } active:scale-[0.98]`}
+          >
+            ▶ {isMoment ? `Play from ${formatTime(meta.at ?? 0)}` : "Play it together"}
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <>
+      {m.body}
+      {m.edited_at && <span className={`ml-1.5 text-[10px] ${mine ? "text-ink/50" : "text-cream/40"}`}>edited</span>}
+    </>
   );
 }
