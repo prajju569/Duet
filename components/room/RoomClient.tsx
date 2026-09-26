@@ -21,6 +21,7 @@ import { QuickLoginSetup } from "@/components/QuickLoginSetup";
 import { ChatSearch } from "./ChatSearch";
 import { PollSheet } from "./PollSheet";
 import { CountdownSheet, daysUntil } from "./CountdownSheet";
+import { PlayRequestCard, REQUEST_SECONDS } from "./PlayRequestCard";
 import { questionOfTheDay } from "@/lib/questions";
 import { updateAppBadge } from "@/lib/badge";
 import { RenameSheet } from "@/components/RoomsList";
@@ -473,6 +474,13 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           setToast(`💭 ${firstName(String(payload?.from ?? "They"))} is thinking of you`);
           setTimeout(() => setToast(null), 4000);
         })
+        .on("broadcast", { event: "play-request" }, ({ payload }) => {
+          const r = payload as PlayRequest;
+          if (!r?.track?.videoId || r.from === me.id) return;
+          navigator.vibrate?.([20, 40, 20]);
+          setIncoming({ ...r, track: { ...r.track, title: String(r.track.title ?? "").slice(0, 120) } });
+        })
+        .on("broadcast", { event: "play-response" }, ({ payload }) => onPlayResponseRef.current(payload as { id: string; choice: "now" | "next" | "keep" }))
         .on("broadcast", { event: "listen-invite" }, ({ payload }) => {
           navigator.vibrate?.([30, 60, 30]);
           burstRef.current("🎧");
@@ -1202,6 +1210,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   );
 
   /** ▶ on a moment / dedication card: play that song for both of you. */
+  const requestPlayRef = useRef<(t: Track, by?: string | null, startSec?: number, queueItemId?: string | null, sentByPartner?: boolean) => void>(
+    () => {},
+  );
   const playFromMessage = useCallback(
     (m: Message) => {
       const meta = m.meta;
@@ -1215,7 +1226,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       };
       const at = m.kind === "moment" ? (meta.at ?? 0) : 0;
       if (player.state?.videoId === meta.videoId && m.kind === "moment") return player.seek(at);
-      void player.playTrack(track, m.user_id ?? me.id, at);
+      requestPlayRef.current(track, m.user_id ?? me.id, at, null, !!m.user_id && m.user_id !== me.id);
     },
     [player, me.id],
   );
@@ -1312,6 +1323,112 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       );
     },
     [supabase, room.id, me.id, features.v2, loadOurSongs, showToast],
+  );
+
+  // ── "Pajju wants to play …" — no more songs switching under someone ─
+  // If your partner is listening to a song they picked, tapping another song asks them
+  // first: ▶ Play now / ⏭ Play next / Keep this. No answer in 20s → it goes to Up next.
+  type PlayRequest = { id: string; from: string; fromName: string; track: Track; startSec: number; queueItemId: string | null };
+  const [incoming, setIncoming] = useState<PlayRequest | null>(null);
+  const pending = useRef<{ req: PlayRequest; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const stateRef = useRef(player.state);
+  stateRef.current = player.state;
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+
+  const addToQueueTop = useCallback(
+    async (t: Track, queueItemId: string | null) => {
+      const q = queueRef.current;
+      if (queueItemId && q.some((x) => x.id === queueItemId)) {
+        if (features.v2) void reorderQueue([queueItemId, ...q.filter((x) => x.id !== queueItemId).map((x) => x.id)]);
+        return;
+      }
+      const top = q.length ? Math.min(...q.map((x) => x.position ?? Date.parse(x.created_at) / 1000)) - 1 : Date.now() / 1000;
+      await supabase.from("queue_items").insert({
+        room_id: room.id,
+        video_id: t.videoId,
+        title: t.title,
+        channel: t.channel,
+        thumbnail: t.thumbnail,
+        duration_sec: t.durationSec,
+        added_by: me.id,
+        ...(features.v2 ? { position: top } : {}),
+      });
+    },
+    [features.v2, reorderQueue, supabase, room.id, me.id],
+  );
+
+  const needsAsking = useCallback(
+    (t: Track, sentByPartner: boolean) => {
+      const s = stateRef.current;
+      if (!partner || !s?.videoId || !s.isPlaying || s.videoId === t.videoId) return false;
+      if (sentByPartner) return false; // they sent this song (dedication / moment / link) — they want it
+      if (s.addedBy === me.id) return false; // it's my pick — I can change it
+      const p = presenceRef.current[partner.userId];
+      return !!(p?.listening && p.active !== false); // they're actually listening right now
+    },
+    [partner, me.id],
+  );
+
+  /** Every "play this song" tap goes through here. */
+  const requestPlay = useCallback(
+    (t: Track, by: string | null = null, startSec = 0, queueItemId: string | null = null, sentByPartner = false) => {
+      if (!needsAsking(t, sentByPartner)) {
+        if (queueItemId) return void player.playQueueItem(queueItemId);
+        return void player.playTrack(t, by ?? me.id, startSec);
+      }
+      if (pending.current) return showToast("Still waiting for an answer…");
+      const req: PlayRequest = { id: crypto.randomUUID(), from: me.id, fromName: firstName(me.name), track: t, startSec, queueItemId };
+      void roomChannelRef.current?.send({ type: "broadcast", event: "play-request", payload: req });
+      const name = partner ? firstName(partner.name) : "them";
+      showToast(`⏳ Asking ${name}…`);
+      pending.current = {
+        req,
+        // Backup in case their answer never arrives: don't cut their song, queue it.
+        timer: setTimeout(() => {
+          if (pending.current?.req.id !== req.id) return;
+          pending.current = null;
+          void addToQueueTop(t, queueItemId);
+          showToast(`No answer from ${name} — “${t.title}” is next in Up next`);
+        }, (REQUEST_SECONDS + 3) * 1000),
+      };
+    },
+    [needsAsking, player, me.id, me.name, partner, showToast, addToQueueTop],
+  );
+
+  const onPlayResponse = useCallback(
+    (res: { id: string; choice: "now" | "next" | "keep" }) => {
+      const p = pending.current;
+      if (!p || p.req.id !== res.id) return;
+      clearTimeout(p.timer);
+      pending.current = null;
+      const name = partner ? firstName(partner.name) : "They";
+      if (res.choice === "now") showToast(`▶ ${name} said yes!`);
+      else if (res.choice === "next") {
+        void addToQueueTop(p.req.track, p.req.queueItemId);
+        showToast(`⏭ “${p.req.track.title}” plays next`);
+      } else showToast(`🎧 ${name} wants to finish this song first`);
+    },
+    [partner, showToast, addToQueueTop],
+  );
+  useEffect(() => {
+    requestPlayRef.current = requestPlay;
+  }, [requestPlay]);
+  const onPlayResponseRef = useRef(onPlayResponse);
+  onPlayResponseRef.current = onPlayResponse;
+
+  const answerRequest = useCallback(
+    (choice: "now" | "next" | "keep") => {
+      const req = incoming;
+      if (!req) return;
+      setIncoming(null);
+      if (choice === "now") {
+        if (req.queueItemId && queueRef.current.some((q) => q.id === req.queueItemId)) void player.playQueueItem(req.queueItemId);
+        else void player.playTrack(req.track, req.from, req.startSec);
+      }
+      void roomChannelRef.current?.send({ type: "broadcast", event: "play-response", payload: { id: req.id, choice } });
+    },
+    [incoming, player],
   );
 
   const removeFromQueue = useCallback(
@@ -1492,6 +1609,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onToggleFavourite={toggleFavourite}
           onAddToQueue={addToQueue}
           onImport={importTracks}
+          onRequestPlay={requestPlay}
           onRemoveFromQueue={removeFromQueue}
           onError={showToast}
         />
@@ -1542,7 +1660,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onPin={features.v4 ? (id) => void pinMessage(pinnedId === id ? null : id) : undefined}
           pinnedId={pinnedId}
           onRetry={retryMessage}
-          onPlayTrack={(t, by) => void player.playTrack(t, by ?? me.id)}
+          onPlayTrack={(t, by) => requestPlay(t, by ?? me.id, 0, null, !!by && by !== me.id)}
           notice={
             scheduled && features.v2 ? (
               <div className="animate-rise mb-2 flex items-center gap-3 rounded-2xl bg-zinc-900/90 p-2.5 pl-3.5 ring-1 ring-white/10 backdrop-blur">
@@ -1642,6 +1760,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         />
       )}
       {burst.layer}
+      {incoming && <PlayRequestCard key={incoming.id} fromName={incoming.fromName} track={incoming.track} onAnswer={answerRequest} />}
 
       {renameOpen && (
         <RenameSheet

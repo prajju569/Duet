@@ -47,6 +47,8 @@ type Props = {
   onToggleFavourite: (t: Track) => void;
   onAddToQueue: (t: Track) => void;
   onImport?: (tracks: Track[], where: "queue" | "ours" | "mine") => Promise<void>;
+  /** Play a song — asks your partner first if they're listening to their own pick. */
+  onRequestPlay?: (t: Track, by?: string | null, startSec?: number, queueItemId?: string | null) => void;
   onRemoveFromQueue: (id: string) => void;
   onError: (msg: string) => void;
 };
@@ -153,7 +155,14 @@ export function PlayerPanel(props: Props) {
         <QueueList
           queue={queue}
           nameOf={nameOf}
-          onPlay={(id) => playAndShow(() => player.playQueueItem(id))}
+          onPlay={(id) =>
+            playAndShow(() => {
+              const q = queue.find((x) => x.id === id);
+              if (props.onRequestPlay && q)
+                props.onRequestPlay({ videoId: q.video_id, title: q.title, channel: q.channel, thumbnail: q.thumbnail, durationSec: q.duration_sec }, q.added_by, 0, id);
+              else void player.playQueueItem(id);
+            })
+          }
           onRemove={props.onRemoveFromQueue}
           onSearch={() => setTab("search")}
           onReorder={props.v2 ? props.onReorder : undefined}
@@ -165,7 +174,7 @@ export function PlayerPanel(props: Props) {
         <SearchPanel
           onDedicate={props.v2 ? props.onDedicate : undefined}
           isFavourite={isFavourite}
-          onPlay={(t) => playAndShow(() => player.playTrack(t))}
+          onPlay={(t) => playAndShow(() => (props.onRequestPlay ? props.onRequestPlay(t) : void player.playTrack(t)))}
           onQueue={props.onAddToQueue}
           onToggleFavourite={onToggleFavourite}
           onError={props.onError}
@@ -179,7 +188,7 @@ export function PlayerPanel(props: Props) {
           favourites={favourites}
           ourSongs={props.ourSongs}
           nameOf={nameOf}
-          onPlay={(t, by) => playAndShow(() => player.playTrack(t, by ?? undefined))}
+          onPlay={(t, by) => playAndShow(() => (props.onRequestPlay ? props.onRequestPlay(t, by ?? null) : void player.playTrack(t, by ?? undefined)))}
           onQueue={props.onAddToQueue}
           onToggleFavourite={onToggleFavourite}
           onRemoveOurSong={props.onRemoveOurSong}
