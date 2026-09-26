@@ -1019,7 +1019,11 @@ function MessageBody({
   poll?: PollInfo;
   onOpenGame?: (gameId: string) => void;
 }) {
-  if (m.deleted_at) return <span className="italic opacity-60">🚫 Message deleted</span>;
+  if (m.deleted_at) {
+    // Accounts with their own "unsend" text (a private per-account setting) show that instead.
+    const custom = m.body && m.body !== "Message deleted" ? m.body : null;
+    return custom ? <span className="italic opacity-80">🙊 {custom}</span> : <span className="italic opacity-60">🚫 Message deleted</span>;
+  }
   const meta = m.meta ?? {};
   const stop = (e: React.PointerEvent) => e.stopPropagation();
 

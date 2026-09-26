@@ -44,7 +44,7 @@ function describe(r: HomeRoom, meId: string) {
   const mine = r.last_user === meId;
   const who = mine ? "You" : firstName(r.partner_name);
   const body = r.last_body ?? "";
-  if (r.last_deleted) return `${mine ? "You: " : ""}🚫 Message deleted`;
+  if (r.last_deleted) return `${mine ? "You: " : ""}${body && body !== "Message deleted" ? `🙊 ${body}` : "🚫 Message deleted"}`;
   switch (r.last_kind) {
     case "system":
       return body;
