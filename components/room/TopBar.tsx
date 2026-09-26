@@ -47,14 +47,16 @@ export function lastSeenText(ms: number, now = Date.now()) {
 
 function Person({ userId, name, presence, isMe, lastSeen }: { userId: string; name: string; presence?: PresenceInfo; isMe?: boolean; lastSeen?: number | null }) {
   const online = !!presence;
-  const status = presence?.listening ? "listening now" : online ? "online" : lastSeen ? lastSeenText(lastSeen) : "offline";
+  // "away" = Duet is open but in the background (their music is paused by the phone).
+  const away = online && presence?.active === false;
+  const status = away ? "away" : presence?.listening ? "listening now" : online ? "online" : lastSeen ? lastSeenText(lastSeen) : "offline";
   return (
     <div className="flex min-w-0 items-center gap-2">
       <Avatar userId={userId} name={name} size={30} online={online} />
       <div className="min-w-0 leading-tight">
         <div className="truncate text-[13px] font-medium">{isMe ? "You" : firstName(name)}</div>
-        <div className={`flex items-center gap-1 overflow-hidden text-[11px] whitespace-nowrap ${presence?.listening ? "text-rose-200" : "text-cream/50"}`}>
-          {presence?.listening && <HeadphonesIcon size={11} className="animate-pulse" />}
+        <div className={`flex items-center gap-1 overflow-hidden text-[11px] whitespace-nowrap ${presence?.listening && !away ? "text-rose-200" : "text-cream/50"}`}>
+          {presence?.listening && !away && <HeadphonesIcon size={11} className="animate-pulse" />}
           {status}
         </div>
       </div>

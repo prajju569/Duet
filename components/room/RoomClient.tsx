@@ -1302,7 +1302,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   );
 
   // Slim bar at the top of the chat: countdown, or "invite to listen".
-  const partnerListening = !!(partner && presence[partner.userId]?.listening);
+  const partnerListening = !!(partner && presence[partner.userId]?.listening && presence[partner.userId]?.active !== false);
   const days = countdown ? daysUntil(countdown.date) : null;
   const showInvite = !!(features.v4 && partner && player.listening && !partnerListening);
   const showCountdown = !!(countdown && days !== null && days >= 0);

@@ -278,9 +278,11 @@ export function usePlaybackSync({ roomId, meId, initial = null, broadcast, onErr
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onVisible);
+    window.addEventListener("pageshow", onVisible); // iPhone restoring Duet from its page cache
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onVisible);
+      window.removeEventListener("pageshow", onVisible);
     };
   }, [syncClock, fetchState, apply]);
 
