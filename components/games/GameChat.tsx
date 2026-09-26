@@ -49,6 +49,7 @@ export function GameChat({
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [typing, setTyping] = useState(false); // keyboard is up
   const listRef = useRef<HTMLDivElement>(null);
   const shown = messages.filter((m) => m.kind !== "system" && m.kind !== "game").slice(open ? -40 : -2);
   const lastId = shown[shown.length - 1]?.id;
@@ -56,7 +57,15 @@ export function GameChat({
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [lastId, open, partnerTyping]);
+  }, [lastId, open, partnerTyping, typing]);
+  // The list shrinks when the keyboard opens (a CSS change, no re-render) — stay on the newest message.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => (el.scrollTop = el.scrollHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const send = () => {
     const body = text.trim();
@@ -81,7 +90,10 @@ export function GameChat({
         <div
           ref={listRef}
           data-testid="game-chat"
-          className={`flex flex-col gap-1 overflow-y-auto overscroll-contain py-1 ${open ? "max-h-[38dvh]" : "max-h-[76px]"}`}
+          className={`flex flex-col gap-1 overflow-y-auto overscroll-contain py-1 ${
+            // Sized from the visible area (--vvh shrinks when the keyboard opens), never the full screen.
+            typing ? "max-h-[calc(var(--vvh,100dvh)*0.3)]" : open ? "max-h-[calc(var(--vvh,100dvh)*0.36)]" : "max-h-[76px]"
+          }`}
         >
           {shown.length === 0 && <p className="py-2 text-center text-xs text-cream/40">Say something while you play 💬</p>}
           {shown.map((m) => {
@@ -110,7 +122,7 @@ export function GameChat({
             </div>
           )}
         </div>
-        <div className="-mx-1 flex [scrollbar-width:none] gap-0.5 overflow-x-auto py-1">
+        <div className={`-mx-1 [scrollbar-width:none] ${typing ? "hidden" : "flex"} gap-0.5 overflow-x-auto py-1`}>
           {QUICK.map((e) => (
             <button
               key={e}
@@ -136,8 +148,14 @@ export function GameChat({
               setText(e.target.value);
               onTyping(e.target.value.length > 0);
             }}
-            onFocus={() => setOpen(true)}
-            onBlur={() => onTyping(false)}
+            onFocus={() => {
+              setOpen(true);
+              setTyping(true);
+            }}
+            onBlur={() => {
+              setTyping(false);
+              onTyping(false);
+            }}
             placeholder="Message…"
             aria-label="Message"
             enterKeyHint="send"
@@ -147,6 +165,9 @@ export function GameChat({
             type="submit"
             disabled={!text.trim()}
             aria-label="Send"
+            // Keep the keyboard up after sending, like any chat app.
+            onPointerDown={(e) => e.preventDefault()}
+            onMouseDown={(e) => e.preventDefault()}
             className="flex size-10 shrink-0 items-center justify-center rounded-full bg-cream text-ink transition active:scale-90 disabled:opacity-40"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
