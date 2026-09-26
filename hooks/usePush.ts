@@ -42,7 +42,10 @@ export function usePush(userId: string, enabled: boolean) {
 
   useEffect(() => {
     if (!enabled || !("serviceWorker" in navigator)) return void refresh();
-    navigator.serviceWorker.register("/sw.js").then(refresh, refresh);
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((reg) => reg.update().catch(() => {})) // pick up a new worker right after a deploy
+      .then(refresh, refresh);
   }, [enabled, refresh]);
 
   const turnOn = useCallback(async () => {

@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseKey,
+    // Which deploy this build is — lets open apps notice a newer one (see UpdateBanner).
+    NEXT_PUBLIC_BUILD: process.env.VERCEL_GIT_COMMIT_SHA || "dev",
   },
   images: {
     // YouTube thumbnails. Also lets the browser read thumbnail pixels

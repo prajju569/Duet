@@ -13,11 +13,19 @@ self.addEventListener("push", (event) => {
   const url = data.url || "/";
   event.waitUntil(
     (async () => {
-      // Already looking at this room? Don't buzz (except on iPhone, which requires a notification per push).
-      const isApple = /iPhone|iPad|Macintosh/.test(self.navigator.userAgent || "");
+      // Already looking at this room? Then stay quiet.
       const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      const watching = wins.some((c) => c.visibilityState === "visible" && c.url.includes(url));
-      if (watching && !isApple) return;
+      const watching = wins.some((c) => c.visibilityState === "visible" && new URL(c.url).pathname === url);
+      if (watching) {
+        // Safari (iPhone, iPad, Mac) insists every push shows *something* — show it and take it straight down.
+        const ua = self.navigator.userAgent || "";
+        const safari = /iPhone|iPad|iPod/.test(ua) || (/Safari/.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox/.test(ua));
+        if (!safari) return;
+        await self.registration.showNotification(title, { body: data.body || "", tag: data.tag || "duet", silent: true, data: { url } });
+        const shown = await self.registration.getNotifications({ tag: data.tag || "duet" });
+        shown.forEach((n) => n.close());
+        return;
+      }
       await self.registration.showNotification(title, {
         body: data.body || "",
         tag: data.tag || "duet",

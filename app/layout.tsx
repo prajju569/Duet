@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ViewportFit } from "@/components/ViewportFit";
+import { UpdateBanner } from "@/components/UpdateBanner";
 
 const display = Fraunces({ subsets: ["latin"], style: ["normal", "italic"], variable: "--font-display-face" });
 const body = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-body" });
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body className="font-sans antialiased">
         <ViewportFit />
+        <UpdateBanner />
         {children}
       </body>
     </html>
