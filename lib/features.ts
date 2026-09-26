@@ -9,4 +9,4 @@ export async function getSchemaVersion(supabase: SupabaseClient): Promise<number
   return error || typeof data !== "number" ? 1 : data;
 }
 
-export type Features = { v2: boolean; v4?: boolean; v5?: boolean };
+export type Features = { v2: boolean; v4?: boolean; v5?: boolean; v6?: boolean };

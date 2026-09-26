@@ -48,6 +48,7 @@ type Props = {
   /** Put this text in the message box (e.g. today's question). */
   prefill?: { text: string; n: number } | null;
   onPin?: (messageId: string) => void;
+  onOpenGame?: (gameId: string) => void;
   pinnedId?: string | null;
   /** v4: send later */
   onSchedule?: (body: string, at: Date) => Promise<boolean>;
@@ -59,7 +60,7 @@ type Props = {
   reactions: Record<string, Reaction>;
   hasOlder: boolean;
   onLoadOlder: () => void;
-  partnerTyping: boolean | "recording";
+  partnerTyping: boolean | "recording" | "searching";
   nameOf: (userId: string | null | undefined) => string;
   onSend: (body: string, replyTo: string | null) => void;
   onTyping: (typing: boolean, recording?: boolean) => void;
@@ -400,6 +401,7 @@ export function ChatPanel(props: Props) {
                     : undefined
                 }
                 pinned={props.pinnedId === m.id}
+                onOpenGame={props.onOpenGame}
                 poll={
                   m.kind === "poll"
                     ? { votes: (props.votes ?? []).filter((v) => v.message_id === m.id), meId, nameOf: props.nameOf, onVote: props.onVote ? (c) => props.onVote!(m.id, c) : undefined }
@@ -435,7 +437,8 @@ export function ChatPanel(props: Props) {
               <span className="typing-dot [animation-delay:150ms]" />
               <span className="typing-dot [animation-delay:300ms]" />
             </span>
-            {firstName(partner.name)} is {partnerTyping === "recording" ? "recording a voice note 🎙️" : "typing…"}
+            {firstName(partner.name)} is{" "}
+            {partnerTyping === "recording" ? "recording a voice note 🎙️" : partnerTyping === "searching" ? "finding a song for you 🎵" : "typing…"}
           </div>
         )}
       </div>
@@ -719,6 +722,7 @@ type BubbleProps = {
   poll?: PollInfo;
   onPin?: () => void;
   pinned?: boolean;
+  onOpenGame?: (gameId: string) => void;
 };
 
 type PollInfo = { votes: PollVote[]; meId: string; nameOf: (id: string | null | undefined) => string; onVote?: (choice: number) => void };
@@ -750,6 +754,7 @@ function Bubble({
   poll,
   onPin,
   pinned,
+  onOpenGame,
 }: BubbleProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -903,7 +908,7 @@ function Bubble({
               <span className={`line-clamp-2 text-[13px] ${mine ? "text-ink/70" : "text-cream/65"}`}>{quote.message ? quote.message.body : "Earlier message"}</span>
             </button>
           )}
-          <MessageBody m={m} mine={mine} authorName={authorName} onPlay={onPlay} onPlayTrack={onPlayTrack} poll={poll} />
+          <MessageBody m={m} mine={mine} authorName={authorName} onPlay={onPlay} onPlayTrack={onPlayTrack} poll={poll} onOpenGame={onOpenGame} />
           <span
             className={`ml-2 inline-flex translate-y-[3px] items-center gap-0.5 align-baseline text-[10px] ${
               mine && !bare ? "text-ink/55" : "text-cream/40"
@@ -1004,6 +1009,7 @@ function MessageBody({
   onPlay,
   onPlayTrack,
   poll,
+  onOpenGame,
 }: {
   m: Message;
   mine: boolean;
@@ -1011,12 +1017,33 @@ function MessageBody({
   onPlay?: () => void;
   onPlayTrack?: (t: Track) => void;
   poll?: PollInfo;
+  onOpenGame?: (gameId: string) => void;
 }) {
   if (m.deleted_at) return <span className="italic opacity-60">🚫 Message deleted</span>;
   const meta = m.meta ?? {};
   const stop = (e: React.PointerEvent) => e.stopPropagation();
 
   if (m.kind === "image") return <ImageMessage m={m} />;
+  if (m.kind === "game" && meta.gameId) {
+    return (
+      <span className="block w-56 max-w-full whitespace-normal">
+        <span className={`block text-[11.5px] font-semibold tracking-wide uppercase ${mine ? "text-ink/60" : "text-rose-200/90"}`}>
+          🎮 {mine ? "You" : authorName} started a game
+        </span>
+        <span className="mt-1 block text-lg font-semibold">{m.body.replace(/^🎮\s*/, "")}</span>
+        {onOpenGame && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onOpenGame(meta.gameId!)}
+            className={`mt-2 w-full rounded-xl py-2 text-[13px] font-semibold active:scale-[0.98] ${mine ? "bg-ink/15 text-ink" : "bg-white/12 text-cream"}`}
+          >
+            ▶ {mine ? "Open game" : "Join game"}
+          </button>
+        )}
+      </span>
+    );
+  }
   if (m.kind === "poll" && meta.options && poll) return <PollCard question={m.body} options={meta.options} mine={mine} poll={poll} />;
   if (m.kind === "voice") return <VoiceMessage m={m} mine={mine} />;
 

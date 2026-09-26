@@ -22,6 +22,8 @@ import { ChatSearch } from "./ChatSearch";
 import { PollSheet } from "./PollSheet";
 import { CountdownSheet, daysUntil } from "./CountdownSheet";
 import { PlayRequestCard, REQUEST_SECONDS } from "./PlayRequestCard";
+import { GameSheet, newGameState, turnOf } from "@/components/games/GameSheet";
+import { gameInfo, type GameKind, type GameRow } from "@/lib/games/types";
 import { questionOfTheDay } from "@/lib/questions";
 import { updateAppBadge } from "@/lib/badge";
 import { RenameSheet } from "@/components/RoomsList";
@@ -197,6 +199,8 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const [favourites, setFavourites] = useState<Favourite[]>(initial.favourites);
   const [presence, setPresence] = useState<Record<string, PresenceInfo>>({});
   const [partnerTyping, setPartnerTyping] = useState<boolean | "recording">(false);
+  const [partnerSearching, setPartnerSearching] = useState(false);
+  const searchingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const [connected, setConnected] = useState(false);
@@ -473,6 +477,12 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           burstRef.current("💗");
           setToast(`💭 ${firstName(String(payload?.from ?? "They"))} is thinking of you`);
           setTimeout(() => setToast(null), 4000);
+        })
+        .on("broadcast", { event: "searching" }, ({ payload }) => {
+          if (payload?.userId === me.id) return;
+          setPartnerSearching(!!payload?.on);
+          if (searchingTimer.current) clearTimeout(searchingTimer.current);
+          if (payload?.on) searchingTimer.current = setTimeout(() => setPartnerSearching(false), 9000);
         })
         .on("broadcast", { event: "play-request" }, ({ payload }) => {
           const r = payload as PlayRequest;
@@ -1242,6 +1252,11 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     [me.id],
   );
 
+  const sendSearching = useCallback(
+    (on: boolean) => void roomChannelRef.current?.send({ type: "broadcast", event: "searching", payload: { userId: me.id, on } }),
+    [me.id],
+  );
+
   const react = useCallback(
     async (messageId: string, emoji: string) => {
       const key = `${messageId}:${me.id}`;
@@ -1324,6 +1339,50 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     },
     [supabase, room.id, me.id, features.v2, loadOurSongs, showToast],
   );
+
+  // ── Couple games (v6) ──────────────────────────────────────────────
+  const [games, setGames] = useState<GameRow[]>([]);
+  const [openGame, setOpenGame] = useState<string | null>(null);
+  const loadGames = useCallback(async () => {
+    const { data } = await supabase.from("games").select("*").eq("room_id", room.id).eq("status", "active").order("updated_at", { ascending: false }).limit(10);
+    setGames((data ?? []) as GameRow[]);
+  }, [supabase, room.id]);
+  useEffect(() => {
+    if (!features.v6) return;
+    void loadGames();
+    // Own channel: a database without games can't break chat.
+    const ch = supabase
+      .channel(`games:${room.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `room_id=eq.${room.id}` }, ({ new: row }) => {
+        const g = row as GameRow;
+        if (!g?.id) return;
+        setGames((prev) => {
+          const rest = prev.filter((x) => x.id !== g.id);
+          return g.status === "active" ? [g, ...rest] : rest;
+        });
+      })
+      .subscribe((s) => s === "SUBSCRIBED" && void loadGames());
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [features.v6, supabase, room.id, loadGames]);
+
+  const startGame = useCallback(
+    async (kind: GameKind) => {
+      if (!partner) return showToast("Invite your person first — games need two 🎮");
+      const info = gameInfo(kind);
+      const { data, error } = await supabase
+        .from("games")
+        .insert({ room_id: room.id, kind, state: newGameState(kind, [me.id, partner.userId]) })
+        .select()
+        .single();
+      if (error || !data) return showToast("Couldn't start the game");
+      setOpenGame((data as GameRow).id);
+      void sendMessageRef.current(`🎮 ${info.name} ${info.emoji}`, null, { kind: "game", meta: { gameId: (data as GameRow).id, game: kind } });
+    },
+    [partner, supabase, room.id, me.id, showToast],
+  );
+  const myTurnGame = games.find((g) => turnOf(g) === me.id);
 
   // ── "Pajju wants to play …" — no more songs switching under someone ─
   // If your partner is listening to a song they picked, tapping another song asks them
@@ -1494,7 +1553,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const days = countdown ? daysUntil(countdown.date) : null;
   const showInvite = !!(features.v4 && partner && player.listening && !partnerListening);
   const showCountdown = !!(countdown && days !== null && days >= 0);
-  const busyBanners = Number(showInvite) + Number(showCountdown) + Number(!!pinnedMsg);
+  const busyBanners = Number(showInvite) + Number(showCountdown) + Number(!!pinnedMsg) + Number(!!(myTurnGame && !openGame));
   const pushCardShowing = !!(partner && !pushPromptHidden && (push.status === "off" || push.status === "needs-install") && player.unlocked && messages.length > 0);
   const banner = (
     <>
@@ -1522,6 +1581,14 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           className="flex items-center gap-1.5 rounded-full bg-rose-300/15 px-3.5 py-1.5 text-[12.5px] font-medium text-rose-100 ring-1 ring-rose-200/20 backdrop-blur"
         >
           🎧 {firstName(partner.name)} isn&apos;t listening · <b>Invite</b>
+        </button>
+      )}
+      {myTurnGame && !openGame && (
+        <button
+          onClick={() => setOpenGame(myTurnGame.id)}
+          className="flex items-center gap-1.5 rounded-full bg-emerald-300/15 px-3.5 py-1.5 text-[12.5px] font-medium text-emerald-100 ring-1 ring-emerald-200/20"
+        >
+          {gameInfo(myTurnGame.kind).emoji} Your turn in {gameInfo(myTurnGame.kind).name} · <b>Play</b>
         </button>
       )}
       {partner && !qHidden && busyBanners < (smallScreen ? 1 : 2) && !(smallScreen && pushCardShowing) && (
@@ -1610,6 +1677,8 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onAddToQueue={addToQueue}
           onImport={importTracks}
           onRequestPlay={requestPlay}
+          onSearching={sendSearching}
+          games={features.v6 ? { active: games, start: startGame, open: setOpenGame, turnOf, meId: me.id } : undefined}
           onRemoveFromQueue={removeFromQueue}
           onError={showToast}
         />
@@ -1621,7 +1690,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           reactions={reactions}
           hasOlder={hasOlder}
           onLoadOlder={loadOlder}
-          partnerTyping={partnerTyping}
+          partnerTyping={partnerTyping || (partnerSearching ? "searching" : false)}
           nameOf={nameOf}
           onSend={sendMessage}
           onTyping={sendTyping}
@@ -1644,6 +1713,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onVote={features.v4 ? vote : undefined}
           banner={banner}
           prefill={prefill}
+          onOpenGame={features.v6 ? setOpenGame : undefined}
           closedNotice={
             closed ? (
               <div className="flex items-center gap-3 rounded-2xl bg-zinc-900/90 p-3 pl-4 text-sm ring-1 ring-white/10">
@@ -1760,6 +1830,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         />
       )}
       {burst.layer}
+      {openGame && <GameSheet gameId={openGame} meId={me.id} nameOf={nameOf} onClose={() => setOpenGame(null)} onError={showToast} />}
       {incoming && <PlayRequestCard key={incoming.id} fromName={incoming.fromName} track={incoming.track} onAnswer={answerRequest} />}
 
       {renameOpen && (

@@ -49,6 +49,8 @@ type Props = {
   onImport?: (tracks: Track[], where: "queue" | "ours" | "mine") => Promise<void>;
   /** Play a song — asks your partner first if they're listening to their own pick. */
   onRequestPlay?: (t: Track, by?: string | null, startSec?: number, queueItemId?: string | null) => void;
+  onSearching?: (on: boolean) => void;
+  games?: React.ComponentProps<typeof LibraryPanel>["games"];
   onRemoveFromQueue: (id: string) => void;
   onError: (msg: string) => void;
 };
@@ -179,6 +181,7 @@ export function PlayerPanel(props: Props) {
           onToggleFavourite={onToggleFavourite}
           onError={props.onError}
           onImport={props.onImport}
+          onSearching={props.onSearching}
         />
       )}
       {tab === "library" && (
@@ -192,6 +195,7 @@ export function PlayerPanel(props: Props) {
           onQueue={props.onAddToQueue}
           onToggleFavourite={onToggleFavourite}
           onRemoveOurSong={props.onRemoveOurSong}
+          games={props.games}
         />
       )}
     </>

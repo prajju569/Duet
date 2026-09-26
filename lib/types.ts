@@ -33,7 +33,7 @@ export type Message = {
   id: string;
   room_id: string;
   user_id: string | null;
-  kind: "text" | "system" | "sticker" | "image" | "voice" | "moment" | "dedication" | "poll";
+  kind: "text" | "system" | "sticker" | "image" | "voice" | "moment" | "dedication" | "poll" | "game";
   body: string;
   created_at: string;
   reply_to?: string | null;
@@ -91,6 +91,9 @@ export type MessageMeta = {
   sticker?: string;
   /** 🥹 "missing you" ping */
   miss?: boolean;
+  /** game invite card */
+  gameId?: string;
+  game?: string;
   /** delivered by "Send later" */
   scheduled?: boolean;
   /** poll: the choices (the question is the message body) */

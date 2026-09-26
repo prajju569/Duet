@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parsePlaylistLink, parseYouTubeId } from "@/lib/youtubeUrl";
 import type { Track } from "@/lib/types";
 import { HeartIcon, PlusIcon, SearchIcon } from "@/components/ui/Icons";
@@ -15,6 +15,8 @@ type Props = {
   onError: (msg: string) => void;
   /** Bulk actions for an imported playlist. */
   onImport?: (tracks: Track[], where: "queue" | "ours" | "mine") => Promise<void>;
+  /** Tell the other phone "… is finding a song for you" while this is open. */
+  onSearching?: (on: boolean) => void;
 };
 
 type Imported = { title: string; skipped: number; truncated: boolean };
@@ -25,7 +27,18 @@ let lastResults: Track[] = [];
 let lastPlaylist: Imported | null = null;
 const isLink = (t: string) => !!parseYouTubeId(t) || !!parsePlaylistLink(t);
 
-export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, onError, onDedicate, onImport }: Props) {
+export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, onError, onDedicate, onImport, onSearching }: Props) {
+  // While Search is open (and on screen), keep telling your partner you're picking a song.
+  useEffect(() => {
+    if (!onSearching) return;
+    const ping = () => document.visibilityState === "visible" && onSearching(true);
+    ping();
+    const t = setInterval(ping, 4000);
+    return () => {
+      clearInterval(t);
+      onSearching(false);
+    };
+  }, [onSearching]);
   const [q, setQ] = useState(lastQuery);
   const [results, setResults] = useState<Track[]>(lastResults);
   const [loading, setLoading] = useState(false);

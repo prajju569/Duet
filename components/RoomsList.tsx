@@ -58,6 +58,8 @@ function describe(r: HomeRoom, meId: string) {
         : `${mine ? "You: " : ""}${body} Sticker`;
     case "dedication":
       return `💌 ${who} dedicated ${body.replace(/^💌\s*/, "")}${mine ? "" : " to you"}`;
+    case "game":
+      return `${mine ? "You" : who} started ${body.replace(/^🎮\s*/, "")}`;
     case "poll":
       return `📊 ${mine ? "You" : who}: ${body}`;
     case "moment":

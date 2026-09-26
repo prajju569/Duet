@@ -83,7 +83,7 @@ export default async function RoomPage({
       }}
       me={{ id: user.id, name: profile.display_name, username: profile.username ?? null }}
       openInvite={invite === "1" && members.length < 2}
-      features={{ v2: schemaVersion >= 2, v4: schemaVersion >= 4, v5: schemaVersion >= 5 }}
+      features={{ v2: schemaVersion >= 2, v4: schemaVersion >= 4, v5: schemaVersion >= 5, v6: schemaVersion >= 6 }}
       initialMembers={members}
       initial={{
         messages,

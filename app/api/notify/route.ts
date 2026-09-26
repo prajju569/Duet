@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   const text =
-    msg.kind === "image" ? "📷 Photo" : msg.kind === "voice" ? "🎤 Voice note" : msg.kind === "sticker" ? `${msg.body} (sticker)` : msg.kind === "poll" ? `📊 Poll: ${msg.body}` : msg.body;
+    msg.kind === "image" ? "📷 Photo" : msg.kind === "voice" ? "🎤 Voice note" : msg.kind === "sticker" ? `${msg.body} (sticker)` : msg.kind === "poll" ? `📊 Poll: ${msg.body}` : msg.kind === "game" ? `${msg.body} — tap to play` : msg.body;
   const sent = await pushToUser(admin, partnerId, {
     title: `${name} · ${room.name}`,
     body: text.length > 140 ? text.slice(0, 137) + "…" : text,
