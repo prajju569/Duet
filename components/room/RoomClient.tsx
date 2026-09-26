@@ -609,6 +609,11 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     [supabase, room.id],
   );
 
+  // Autoplay is switched off for now: any room that still has it on gets turned off once opened.
+  useEffect(() => {
+    if (features.v2 && room.autoplay) void changeAutoplay(false);
+  }, [features.v2, room.autoplay, changeAutoplay]);
+
   // ── Us layer (v2) ──────────────────────────────────────────────────
   const scheduleOptions = useMemo(() => {
     const out: Track[] = [];
@@ -1071,7 +1076,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onRemoveOurSong={removeOurSong}
           onReorder={reorderQueue}
           autoplay={autoplay}
-          onAutoplay={changeAutoplay}
+          onAutoplay={undefined /* autoplay hidden for now */}
           v2={features.v2}
           onShareMoment={shareMoment}
           onDedicate={partner ? setDedicating : undefined}
