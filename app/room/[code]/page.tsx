@@ -1,4 +1,9 @@
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { pushConfigured } from "@/lib/push";
+import { copy } from "@/lib/notifyCopy";
+import { buzz, firstName, firstTime } from "@/lib/notifyServer";
 import { preconnect } from "react-dom";
 import { createClient } from "@/lib/supabase/server";
 import { getMyProfile } from "@/lib/profile";
@@ -48,6 +53,17 @@ export default async function RoomPage({
     supabase.from("favourites").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
     getSchemaVersion(supabase),
   ]);
+
+  // Just joined someone's room (the 2nd person, in the last 2 minutes) → 🎉 buzz whoever invited you.
+  const mine = rows?.find((r) => r.user_id === user.id);
+  const host = rows?.find((r) => r.user_id !== user.id);
+  if (mine && host && Date.now() - Date.parse(mine.joined_at) < 120_000 && Date.parse(host.joined_at) < Date.parse(mine.joined_at) && pushConfigured()) {
+    after(async () => {
+      const admin = createAdminClient();
+      if (admin && (await firstTime(admin, room.id, `joined:${user.id}`)))
+        await buzz(admin, { id: room.id, code }, host.user_id, copy.joined(firstName(profile.display_name)), `joined-${room.id}`);
+    });
+  }
 
   const messages = ((latest ?? []) as Message[]).reverse();
   const ids = (rows ?? []).map((r) => r.user_id as string);

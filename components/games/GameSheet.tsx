@@ -56,6 +56,7 @@ export function GameSheet({
   nameOf,
   onClose,
   onError,
+  onMoved,
   chat,
 }: {
   gameId: string;
@@ -63,6 +64,8 @@ export function GameSheet({
   nameOf: (id: string | null | undefined) => string;
   onClose: () => void;
   onError: (msg: string) => void;
+  /** A move was saved — lets the room buzz the other player. */
+  onMoved?: (gameId: string) => void;
   /** The room chat, docked under the board. */
   chat?: React.ReactNode;
 }) {
@@ -109,12 +112,13 @@ export function GameSheet({
         return;
       }
       const g = data as GameRow;
+      onMoved?.(g.id);
       if (g.version >= versionRef.current) {
         versionRef.current = g.version;
         setGame(g);
       }
     },
-    [game, supabase, load, onError],
+    [game, supabase, load, onError, onMoved],
   );
 
   const info = game ? gameInfo(game.kind) : null;

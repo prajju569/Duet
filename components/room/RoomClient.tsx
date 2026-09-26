@@ -268,16 +268,29 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
 
   /** Ask the server to buzz my partner (it builds the text from the saved message). */
   const notifyPartner = useCallback(
-    (messageId: string) => {
+    (messageId: string, kind: "message" | "reaction" = "message") => {
       if (partnerWatching()) return;
       void fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId: room.id, kind: "message", messageId }),
+        body: JSON.stringify({ roomId: room.id, kind, messageId }),
       }).catch(() => {});
     },
     [room.id, partnerWatching],
   );
+  /** After a game move: "your turn" / "you won" for my partner (the server decides which). */
+  const notifyGame = useCallback(
+    (gameId: string) => {
+      if (partnerWatching()) return;
+      void fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId: room.id, kind: "game", gameId }),
+      }).catch(() => {});
+    },
+    [room.id, partnerWatching],
+  );
+  const lastReactPush = useRef(0);
   const togglePush = useCallback(async () => {
     if (push.status === "on") {
       await push.turnOff();
@@ -1269,9 +1282,15 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       const { error } = await supabase
         .from("message_reactions")
         .upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: "message_id,user_id" });
-      if (error) showToast("Couldn't react");
+      if (error) return showToast("Couldn't react");
+      // Buzz them for a reaction on their message (not for removing one; at most every 15s).
+      const author = messagesRef.current.find((m) => m.id === messageId)?.user_id;
+      if (nextEmoji && author && author !== me.id && Date.now() - lastReactPush.current > 15_000) {
+        lastReactPush.current = Date.now();
+        notifyPartner(messageId, "reaction");
+      }
     },
-    [supabase, reactions, me.id, room.id, showToast],
+    [supabase, reactions, me.id, room.id, showToast, notifyPartner],
   );
 
   const lastMarked = useRef(0);
@@ -1865,6 +1884,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           nameOf={nameOf}
           onClose={() => setOpenGame(null)}
           onError={showToast}
+          onMoved={notifyGame}
           chat={
             <GameChat
               messages={messages}
