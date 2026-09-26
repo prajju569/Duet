@@ -25,7 +25,7 @@ Spotify Messages (Listening activity + Request to Jam), top couples apps (Paired
 | Pin / mute / archive / mark unread chats | ✅ | ✅ | ✅ | ✅ | – | – | ✅ **new** |
 | App-icon unread badge | ✅ | ✅ | ✅ | ✅ | – | – | ✅ **new** |
 | Chat backgrounds / themes | ✅ | ✅ (iOS 26) | ✅ | ✅ | – | ✅ | ✅ themes |
-| Scheduled messages | – | ✅ (Send later) | ✅ | ✅ | – | – | ⏳ songs only |
+| Scheduled messages | – | ✅ (Send later) | ✅ | ✅ | – | – | ✅ 🕛 Send later **new** (songs too) |
 | Listen together, in sync | – | SharePlay | – | – | ✅ Jam (Premium) | – | ✅ **free** (Duet's core) |
 | "What they're listening to" | – | – | – | Notes | ✅ Listening activity | widgets | ✅ "Now playing" on home **new** |
 | Request to listen together | – | – | – | – | ✅ Request to Jam | – | ✅ "🎧 Invite" + push **new** |
@@ -46,7 +46,6 @@ Spotify Messages (Listening activity + Request to Jam), top couples apps (Paired
 6. **Rituals** (couples apps: daily question, countdowns, "thinking of you"). → built question of the day + countdown; 🥹 / 💭 already there.
 
 ## 3. Next candidates (not built yet)
-- Scheduled message ("send at 12:00 am" for birthdays), like Instagram and iMessage. Needs a server timer (Supabase cron).
 - Photo backgrounds per room, like iOS 26.
 - Private "starred" messages, like WhatsApp Keep / Starred.
 - Invited guests resetting a forgotten PIN.

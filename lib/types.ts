@@ -91,6 +91,8 @@ export type MessageMeta = {
   sticker?: string;
   /** 🥹 "missing you" ping */
   miss?: boolean;
+  /** delivered by "Send later" */
+  scheduled?: boolean;
   /** poll: the choices (the question is the message body) */
   options?: string[];
   // moment + dedication: the song

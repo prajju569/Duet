@@ -28,6 +28,8 @@ You'll create three free accounts: **Supabase** (database and login), **Google C
    - **Project URL**, which looks like `https://abcd1234.supabase.co`
    - **anon public** key (it may be called the **publishable** key), a long string
 
+> **Duet v4 (last seen, polls, pins, search, send later, countdown, mute/pin/archive rooms…):** after deploying, run `supabase/migrations/20261002000000_chat_extras.sql`. Until then those features simply stay hidden. It also switches on the database's minute timer (pg_cron) that delivers "Send later" messages even when both phones are off.
+>
 > **Duet v3 (private Duet IDs + richer rooms list):** after deploying, run `supabase/migrations/20261001000000_privacy_rooms.sql`. It hides everyone's Duet ID from other people (only you can see yours) and makes the rooms list show photos, voice notes and 💌 dedications properly.
 >
 > **Duet v2 (stickers, photos, voice notes, lyrics, Our Songs, history, autoplay, themes, scheduled songs, notifications…):** run `supabase/migrations/20260930000000_duet_v2.sql`. Until it's run, those features simply stay hidden. For notifications also add `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` in Vercel (see `.env.example`) and redeploy.
@@ -118,7 +120,11 @@ By default, a login link only works in the same browser that asked for it. On ph
 
 **Chat** — swipe to reply · long-press to react, ✏️ edit (24 h) or 🗑️ unsend · 😊 stickers · 📷 photos · 🎙️ voice notes (music softens while one plays) · 💬 share a moment ("Kesariya at 1:42" → tap to play from there) · 💌 dedicate a song with a note · typing, seen ticks · ❤️ emoji bursts on both screens.
 
-**Us** — 💭 "thinking of you" nudge · 🎧 listening-together counter with milestones · 🎨 room themes · ⏰ scheduled songs (good night / good morning) · 🔔 push notifications for messages and nudges.
+**Chat like WhatsApp** — long-press menu (react, reply, copy, pin, edit, unsend) · search in chat · 📌 pinned message · 📊 polls · 🕛 send later (hold ➤) · drafts · "N unread messages" · tap to retry failed messages · big emoji · YouTube links become "▶ Play it together" cards · voice notes with waveform and 1.5×/2× · last seen / away / recording…
+
+**Rooms** — pin, mute, mark unread, archive (⋯ on each room) · unread badge on the app icon · "Now playing" and 💌 dedications on the list.
+
+**Us** — ⏳ countdown · 💬 question of the day · 🎧 "Invite to listen" · 💭 "thinking of you" nudge · 🎧 listening-together counter with milestones · 🎨 room themes · ⏰ scheduled songs (good night / good morning) · 🔔 push notifications for messages and nudges.
 
 **Good to know:** notifications on iPhone need Duet added to the Home Screen (iOS 16.4+). Scheduled songs start only if Duet is open on at least one phone. Volume is controlled by the side buttons on iPhone.
 

@@ -1009,6 +1009,47 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     } catch {}
   };
 
+  // ── Send later (scheduled messages, private until delivered) ───────
+  const [scheduledMsgs, setScheduledMsgs] = useState<{ id: string; body: string; send_at: string }[]>([]);
+  const loadScheduled = useCallback(async () => {
+    const { data } = await supabase.from("scheduled_messages").select("id, body, send_at").eq("room_id", room.id).order("send_at");
+    setScheduledMsgs((data ?? []) as { id: string; body: string; send_at: string }[]);
+  }, [supabase, room.id]);
+  useEffect(() => {
+    if (!features.v4) return;
+    // Backup delivery (the database also does it every minute on its own).
+    const tick = () => void supabase.rpc("deliver_due_messages").then(({ data }) => (data ? loadScheduled() : undefined));
+    void loadScheduled();
+    tick();
+    const t = setInterval(tick, 30_000);
+    return () => clearInterval(t);
+  }, [features.v4, supabase, loadScheduled]);
+  // Mine just got delivered → drop it from the "scheduled" list.
+  const lastScheduledSeen = [...messages].reverse().find((m) => m.meta?.scheduled && m.user_id === me.id)?.id;
+  useEffect(() => {
+    if (lastScheduledSeen && features.v4) void loadScheduled();
+  }, [lastScheduledSeen, features.v4, loadScheduled]);
+  const scheduleMessage = useCallback(
+    async (body: string, at: Date) => {
+      const { error } = await supabase.from("scheduled_messages").insert({ room_id: room.id, body, send_at: at.toISOString() });
+      if (error) {
+        showToast("Couldn't schedule that — pick a time in the future");
+        return false;
+      }
+      showToast(`🕛 Will send ${at.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`);
+      void loadScheduled();
+      return true;
+    },
+    [supabase, room.id, showToast, loadScheduled],
+  );
+  const cancelScheduled = useCallback(
+    async (id: string) => {
+      setScheduledMsgs((xs) => xs.filter((x) => x.id !== id));
+      await supabase.from("scheduled_messages").delete().eq("id", id);
+    },
+    [supabase],
+  );
+
   // ── Listen with me (like Spotify's "Request to Jam") ───────────────
   const lastInvite = useRef(0);
   const inviteToListen = useCallback(() => {
@@ -1452,6 +1493,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onVote={features.v4 ? vote : undefined}
           banner={banner}
           prefill={prefill}
+          onSchedule={features.v4 ? scheduleMessage : undefined}
+          scheduled={scheduledMsgs}
+          onCancelScheduled={cancelScheduled}
           onPin={features.v4 ? (id) => void pinMessage(pinnedId === id ? null : id) : undefined}
           pinnedId={pinnedId}
           onRetry={retryMessage}

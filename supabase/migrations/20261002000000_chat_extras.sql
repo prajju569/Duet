@@ -132,6 +132,59 @@ $$;
 revoke execute on function public.pin_message(uuid, uuid) from public, anon;
 grant  execute on function public.pin_message(uuid, uuid) to authenticated;
 
+-- Scheduled messages ("send at 12:00 am"): private to the sender until delivered.
+create table if not exists public.scheduled_messages (
+  id         uuid primary key default gen_random_uuid(),
+  room_id    uuid not null references public.rooms (id) on delete cascade,
+  user_id    uuid not null references auth.users (id) on delete cascade default auth.uid(),
+  body       text not null check (char_length(body) between 1 and 4000),
+  send_at    timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists scheduled_messages_due_idx on public.scheduled_messages (send_at);
+alter table public.scheduled_messages enable row level security;
+drop policy if exists "scheduled_own" on public.scheduled_messages;
+create policy "scheduled_own" on public.scheduled_messages for all to authenticated
+  using (user_id = auth.uid() and public.is_room_member(room_id))
+  with check (user_id = auth.uid() and public.is_room_member(room_id) and send_at > now() and send_at < now() + interval '1 year');
+grant select, insert, delete on public.scheduled_messages to authenticated;
+
+-- Deliver everything that's due (stamped with its planned time). Run every minute by
+-- pg_cron below, and also by any open Duet as a backup.
+create or replace function public.deliver_due_messages()
+returns int language plpgsql security definer set search_path = public
+as $$
+declare n int;
+begin
+  with due as (
+    delete from public.scheduled_messages where send_at <= now() returning *
+  )
+  insert into public.messages (room_id, user_id, kind, body, created_at, meta)
+  select d.room_id, d.user_id, 'text', d.body, d.send_at, jsonb_build_object('scheduled', true)
+  from due d
+  where exists (select 1 from public.room_members m where m.room_id = d.room_id and m.user_id = d.user_id);
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+revoke execute on function public.deliver_due_messages() from public, anon;
+grant  execute on function public.deliver_due_messages() to authenticated;
+
+do $$
+begin
+  begin
+    create extension if not exists pg_cron with schema pg_catalog;
+  exception when others then
+    begin
+      create extension if not exists pg_cron;
+    exception when others then null;
+    end;
+  end;
+  perform cron.schedule('duet-scheduled-messages', '* * * * *', 'select public.deliver_due_messages()');
+exception when others then
+  raise notice 'pg_cron unavailable: scheduled messages are delivered whenever Duet is open';
+end $$;
+
 -- Rooms list: + pinned / muted / archived / marked unread + partner's last seen.
 drop function if exists public.my_rooms();
 create function public.my_rooms()

@@ -3,6 +3,7 @@
 import { centerIn } from "@/lib/scroll";
 import { bigEmojiCount } from "@/lib/chatText";
 import { parseYouTubeId } from "@/lib/youtubeUrl";
+import { SendLaterSheet } from "./SendLaterSheet";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Member, Message, PollVote, Reaction, Track } from "@/lib/types";
@@ -45,6 +46,10 @@ type Props = {
   prefill?: { text: string; n: number } | null;
   onPin?: (messageId: string) => void;
   pinnedId?: string | null;
+  /** v4: send later */
+  onSchedule?: (body: string, at: Date) => Promise<boolean>;
+  scheduled?: { id: string; body: string; send_at: string }[];
+  onCancelScheduled?: (id: string) => void;
   meId: string;
   partner: Member | null;
   messages: Message[];
@@ -103,6 +108,14 @@ export function ChatPanel(props: Props) {
   const [stickers, setStickers] = useState(false);
   const [more, setMore] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [laterOpen, setLaterOpen] = useState(false);
+  const sendHold = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heldSend = useRef(false);
+  const openLater = () => {
+    if (!props.onSchedule) return;
+    if (!text.trim() || editing) return props.onError?.("Type your message first, then 🕛 Send later");
+    setLaterOpen(true);
+  };
   const photoRef = useRef<HTMLInputElement>(null);
   const [canRecord, setCanRecord] = useState(false);
   useEffect(() => setCanRecord(typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia), []);
@@ -371,6 +384,20 @@ export function ChatPanel(props: Props) {
           );
         })}
 
+        {props.scheduled?.map((sm) => (
+          <div key={sm.id} className="mt-3 flex flex-col items-end">
+            <div className="max-w-[80%] rounded-3xl border border-dashed border-rose-200/40 bg-white/5 px-3.5 py-2 text-[15px] leading-snug whitespace-pre-wrap text-cream/75">
+              {sm.body}
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[11.5px] text-cream/50">
+              🕛 Sends {new Date(sm.send_at).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
+              <button onClick={() => props.onCancelScheduled?.(sm.id)} className="rounded-full px-1.5 font-semibold text-rose-300" aria-label="Cancel scheduled message">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ))}
+
         {partnerTyping && partner && (
           <div className="animate-rise mt-2 flex items-center gap-2 pl-1 text-xs text-cream/55">
             <span className="flex gap-1 rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-3">
@@ -496,6 +523,19 @@ export function ChatPanel(props: Props) {
                     >
                       📷 <span>Photo</span>
                     </button>
+                    {props.onSchedule && (
+                      <button
+                        type="button"
+                        aria-label="Send later"
+                        onClick={() => {
+                          setMore(false);
+                          openLater();
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                      >
+                        🕛 <span>Send later</span>
+                      </button>
+                    )}
                     {props.onPoll && (
                       <button
                         type="button"
@@ -574,6 +614,26 @@ export function ChatPanel(props: Props) {
               type="submit"
               disabled={!text.trim()}
               aria-label="Send"
+              title={props.onSchedule ? "Hold to send later" : undefined}
+              onPointerDown={() => {
+                if (!props.onSchedule || editing) return;
+                heldSend.current = false;
+                sendHold.current = setTimeout(() => {
+                  heldSend.current = true;
+                  navigator.vibrate?.(12);
+                  openLater();
+                }, 500);
+              }}
+              onPointerUp={() => sendHold.current && clearTimeout(sendHold.current)}
+              onPointerLeave={() => sendHold.current && clearTimeout(sendHold.current)}
+              onClickCapture={(e) => {
+                if (heldSend.current) {
+                  heldSend.current = false;
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              onContextMenu={(e) => props.onSchedule && e.preventDefault()}
               className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cream text-ink transition active:scale-90 disabled:opacity-30"
             >
               <SendIcon size={18} />
@@ -582,6 +642,19 @@ export function ChatPanel(props: Props) {
         </form>
         )}
       </div>
+      {laterOpen && (
+        <SendLaterSheet
+          text={text}
+          onClose={() => setLaterOpen(false)}
+          onPick={async (at) => {
+            setLaterOpen(false);
+            if (await props.onSchedule!(text.trim(), at)) {
+              setText("");
+              props.onTyping(false);
+            }
+          }}
+        />
+      )}
     </main>
   );
 }
@@ -803,6 +876,7 @@ function Bubble({
               mine && !bare ? "text-ink/55" : "text-cream/40"
             }`}
           >
+            {m.meta?.scheduled && <span aria-label="Scheduled">🕛</span>}
             {clockTime(m.created_at)}
             {mine &&
               (m.failed ? (
