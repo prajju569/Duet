@@ -1,5 +1,6 @@
 "use client";
 
+import { centerIn } from "@/lib/scroll";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Member, Message, Reaction } from "@/lib/types";
 import { clockTime, dayLabel, firstName } from "@/lib/format";
@@ -107,7 +108,7 @@ export function ChatPanel(props: Props) {
   function jumpTo(id: string) {
     const target = document.getElementById(`msg-${id}`);
     if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    centerIn(scrollRef.current, target);
     setFlashId(id);
     setTimeout(() => setFlashId((f) => (f === id ? null : f)), 1400);
   }
@@ -742,6 +743,17 @@ function MessageBody({ m, mine, authorName, onPlay }: { m: Message; mine: boolea
 
   if (m.kind === "image") return <ImageMessage m={m} />;
   if (m.kind === "voice") return <VoiceMessage m={m} mine={mine} />;
+
+  if (m.kind === "sticker" && meta.miss) {
+    return (
+      <span className="flex flex-col items-center gap-1 px-2">
+        <span className="animate-pop inline-block text-6xl leading-none drop-shadow-lg">🥹</span>
+        <span className="rounded-full bg-black/35 px-2.5 py-0.5 text-[12px] font-medium text-rose-100">
+          {mine ? "You miss them" : `${authorName} misses you`}
+        </span>
+      </span>
+    );
+  }
 
   if (m.kind === "sticker") {
     return <span className="inline-block text-6xl leading-none drop-shadow-lg">{meta.sticker ?? m.body}</span>;

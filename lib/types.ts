@@ -84,6 +84,8 @@ export type PresenceInfo = {
 /** Extra data carried by non-text messages. */
 export type MessageMeta = {
   sticker?: string;
+  /** 🥹 "missing you" ping */
+  miss?: boolean;
   // moment + dedication: the song
   videoId?: string;
   title?: string;

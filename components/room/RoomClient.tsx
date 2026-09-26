@@ -200,6 +200,8 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     },
     [members, me],
   );
+  const nameOfRef = useRef(nameOf);
+  nameOfRef.current = nameOf;
   const partner = members.find((m) => m.userId !== me.id) ?? null;
 
   const showToast = useCallback((msg: string) => {
@@ -272,6 +274,18 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       body: JSON.stringify({ roomId: room.id, kind: "nudge" }),
     }).catch(() => {});
   }, [burst, me.name, room.id, showToast]);
+  const sendMessageRef = useRef<(body: string, replyTo?: string | null, extra?: { kind: Message["kind"]; meta: MessageMeta }) => Promise<void>>(
+    async () => {},
+  );
+  const lastMiss = useRef(0);
+  const sendMissYou = useCallback(() => {
+    const now = Date.now();
+    if (now - lastMiss.current < 10_000) return showToast("Sent — they'll feel it 🥹");
+    lastMiss.current = now;
+    navigator.vibrate?.(20);
+    burst.fire("🥹");
+    void sendMessageRef.current("🥹", null, { kind: "sticker", meta: { sticker: "🥹", miss: true } });
+  }, [burst, showToast]);
   const burstRef = useRef(burst.fire);
   useEffect(() => {
     burstRef.current = burst.fire;
@@ -454,6 +468,12 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         .channel(`db:${room.id}`, { config: { postgres_changes_options: { wait: true } } })
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter }, ({ new: row }) => {
           const m = row as Message;
+          if (m.meta?.miss && m.user_id !== me.id && !messagesRef.current.some((x) => x.id === m.id)) {
+            navigator.vibrate?.([40, 80, 40, 80, 40]);
+            burstRef.current("🥹");
+            setToast(`🥹 ${nameOfRef.current(m.user_id)} is missing you`);
+            setTimeout(() => setToast(null), 4500);
+          }
           setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev.map((x) => (x.id === m.id ? m : x)) : [...prev, m]));
         })
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter }, ({ new: row }) => {
@@ -720,6 +740,10 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     [supabase, room.id, me.id, showToast],
   );
 
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+  }, [sendMessage]);
+
   // ── v2 chat extras ─────────────────────────────────────────────────
   const replaceMessage = useCallback((m: Message) => setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x))), []);
 
@@ -960,6 +984,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     <TopBar
       roomName={roomName}
       onNudge={sendNudge}
+      onMissYou={features.v2 ? sendMissYou : undefined}
       onTheme={features.v2 ? () => setSheet("theme") : undefined}
       onSchedule={features.v2 ? () => setSheet("schedule") : undefined}
       togetherText={features.v2 && listened >= 60 ? togetherText(listened) : null}
@@ -978,7 +1003,14 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   );
 
   return (
-    <div className="duet-bg vv-fixed overflow-hidden overscroll-none text-cream" style={style} data-playing={player.state?.isPlaying ? "" : undefined}>
+    <div
+      className="duet-bg vv-fixed overflow-clip overscroll-none text-cream"
+      style={style}
+      // Older iPhones ignore overflow:clip — never let the room layer itself scroll.
+      onScroll={(e) => {
+        if (e.currentTarget.scrollTop) e.currentTarget.scrollTop = 0;
+      }}
+      data-playing={player.state?.isPlaying ? "" : undefined}>
       <div className="relative z-10 flex h-full flex-col lg:flex-row">
         <div className="lg:hidden">{topBar}</div>
         <PlayerPanel

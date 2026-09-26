@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { centerIn } from "@/lib/scroll";
 
 /**
  * Phones' on-screen keyboards cover the page without shrinking it (iOS), so anything
@@ -8,6 +9,21 @@ import { useEffect } from "react";
  * area as CSS variables (--vvh height, --vvt top) that full-screen layers size to
  * (see the `vv-fixed` utility), and scrolls whatever field you tap into view.
  */
+/**
+ * Bring a field into view by scrolling only the list it sits in (overflow auto/scroll).
+ * Screen-sized layers already shrink to the visible area, so that's all it takes.
+ */
+function reveal(el: HTMLElement, smooth = false) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy !== "auto" && oy !== "scroll") || p.scrollHeight <= p.clientHeight) continue;
+    const box = p.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (r.top < box.top || r.bottom > box.bottom) centerIn(p, el, smooth);
+    return;
+  }
+}
+
 export function ViewportFit() {
   useEffect(() => {
     const vv = window.visualViewport;
@@ -24,7 +40,7 @@ export function ViewportFit() {
       const el = document.activeElement as HTMLElement | null;
       if (shrank && el?.matches("input, textarea")) {
         cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(() => el.scrollIntoView({ block: "center" }));
+        raf = requestAnimationFrame(() => reveal(el));
       }
     };
     update();
@@ -39,7 +55,7 @@ export function ViewportFit() {
       // Wait for the keyboard to finish sliding up, then bring the field into view.
       t = setTimeout(() => {
         update();
-        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        reveal(el, true);
       }, 320);
     };
     document.addEventListener("focusin", onFocus);

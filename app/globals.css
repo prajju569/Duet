@@ -8,6 +8,11 @@
 
   --animate-rise: rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-pop: pop 0.22s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  --animate-sheet: sheet 0.38s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  @keyframes sheet {
+    from { transform: translateY(100%); }
+    to { transform: none; }
+  }
   @keyframes rise {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: none; }
@@ -152,4 +157,17 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .emoji-float { animation-duration: 1ms !important; }
+}
+
+/* Now Playing album art: the biggest square that fits the space left over. */
+.np-art {
+  width: min(82vw, 38vh, 380px);
+  height: min(82vw, 38vh, 380px);
+}
+@supports (width: 1cqh) {
+  .np-art-box { container-type: size; }
+  .np-art {
+    width: min(100cqw, 100cqh, 420px);
+    height: min(100cqw, 100cqh, 420px);
+  }
 }

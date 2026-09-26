@@ -1,5 +1,6 @@
 "use client";
 
+import { centerIn } from "@/lib/scroll";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PlaybackState } from "@/lib/types";
 import { currentLine, parseLrc } from "@/lib/lyrics";
@@ -8,7 +9,7 @@ type Result = { found: boolean; guess?: boolean; track?: string; artist?: string
 const cache = new Map<string, Result>();
 
 /** Lyrics for the current song — time-synced ones highlight and follow along. */
-export function LyricsPanel({ state, getPosition }: { state: PlaybackState | null; getPosition: () => number }) {
+export function LyricsPanel({ state, getPosition, fill }: { state: PlaybackState | null; getPosition: () => number; fill?: boolean }) {
   const vid = state?.videoId ?? null;
   const [res, setRes] = useState<Result | null>(vid ? (cache.get(vid) ?? null) : null);
   const [loading, setLoading] = useState(false);
@@ -48,7 +49,7 @@ export function LyricsPanel({ state, getPosition }: { state: PlaybackState | nul
 
   useEffect(() => {
     const el = boxRef.current?.querySelector<HTMLElement>(`[data-line="${active}"]`);
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    centerIn(boxRef.current, el);
   }, [active]);
 
   if (!vid) return <p className="px-6 py-10 text-center text-sm text-cream/45">Play a song to see its lyrics.</p>;
@@ -61,7 +62,7 @@ export function LyricsPanel({ state, getPosition }: { state: PlaybackState | nul
     );
 
   return (
-    <div ref={boxRef} className="max-h-[50vh] overflow-y-auto px-4 pb-6 [mask-image:linear-gradient(transparent,black_12%,black_88%,transparent)]">
+    <div ref={boxRef} className={`${fill ? "h-full" : "max-h-[50vh]"} overflow-y-auto overscroll-contain px-4 pb-6 [mask-image:linear-gradient(transparent,black_12%,black_88%,transparent)]`}>
       {res.guess && <p className="pt-3 pb-1 text-center text-[11px] text-cream/40">Best guess — may not match this exact version</p>}
       <div className="py-6">
         {lines.length

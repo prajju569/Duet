@@ -17,6 +17,8 @@ type Props = {
   onInvite: () => void;
   onRename: () => void;
   onNudge: () => void;
+  /** 🥹 "missing you" — posts a card in chat and buzzes their phone */
+  onMissYou?: () => void;
   /** v2 extras (menu entries appear only when provided) */
   onTheme?: () => void;
   onSchedule?: () => void;
@@ -41,7 +43,7 @@ function Person({ userId, name, presence, isMe }: { userId: string; name: string
   );
 }
 
-export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onTheme, onSchedule, togetherText, push }: Props) {
+export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onMissYou, onTheme, onSchedule, togetherText, push }: Props) {
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
 
@@ -71,6 +73,16 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
           <Person userId={me.id} name={me.name} presence={presence[me.id]} isMe />
         </div>
       </div>
+      {partner && onMissYou && (
+        <button
+          onClick={onMissYou}
+          aria-label={`Tell ${firstName(partner.name)} you miss them`}
+          title="Missing you"
+          className="flex size-8 items-center justify-center rounded-full text-base ring-1 ring-white/10 transition hover:bg-white/10 active:scale-90"
+        >
+          🥹
+        </button>
+      )}
       {partner && (
         <button
           onClick={onNudge}

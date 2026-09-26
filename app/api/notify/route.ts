@@ -41,8 +41,13 @@ export async function POST(req: NextRequest) {
   }
 
   const messageId = typeof body.messageId === "string" ? body.messageId : "";
-  const { data: msg } = await supabase.from("messages").select("id, user_id, kind, body, room_id").eq("id", messageId).maybeSingle();
+  const { data: msg } = await supabase.from("messages").select("id, user_id, kind, body, meta, room_id").eq("id", messageId).maybeSingle();
   if (!msg || msg.room_id !== room.id || msg.user_id !== user.id) return NextResponse.json({ error: "Unknown message" }, { status: 400 });
+
+  if (msg.kind === "sticker" && (msg.meta as { miss?: boolean } | null)?.miss) {
+    const sent = await pushToUser(admin, partnerId, { title: `🥹 ${name}`, body: `${name} is missing you`, url, tag: `miss-${room.id}` });
+    return NextResponse.json({ sent });
+  }
 
   const text =
     msg.kind === "image" ? "📷 Photo" : msg.kind === "voice" ? "🎤 Voice note" : msg.kind === "sticker" ? `${msg.body} (sticker)` : msg.body;

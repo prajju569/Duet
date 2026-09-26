@@ -10,7 +10,7 @@ export default function RoomLoading() {
     { mine: true, w: "w-28" },
   ];
   return (
-    <div className="duet-bg vv-fixed overflow-hidden text-cream" aria-busy="true" aria-label="Opening your room">
+    <div className="duet-bg vv-fixed overflow-clip text-cream" aria-busy="true" aria-label="Opening your room">
       <div className="relative z-10 flex h-full flex-col lg:flex-row">
         {/* top bar */}
         <div className="flex items-center gap-3 px-4 pt-[max(env(safe-area-inset-top),10px)] pb-2.5 lg:hidden">

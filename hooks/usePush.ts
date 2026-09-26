@@ -3,7 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase/client";
 
-const VAPID = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+let vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+/** Baked in at build time — or, if the app was built before the key was added, asked for. */
+async function getKey() {
+  if (vapid) return vapid;
+  try {
+    const r = await fetch("/api/push-key");
+    vapid = ((await r.json()) as { key: string | null }).key ?? "";
+  } catch {}
+  return vapid;
+}
 
 function keyBytes(base64: string) {
   const pad = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -18,7 +27,7 @@ export function usePush(userId: string, enabled: boolean) {
   const [status, setStatus] = useState<PushStatus>("unsupported");
 
   const refresh = useCallback(async () => {
-    if (!enabled || !VAPID) return setStatus("unsupported");
+    if (!enabled || !(await getKey())) return setStatus("unsupported");
     const ua = navigator.userAgent;
     const ios = /iPhone|iPad|iPod/.test(ua) || (ua.includes("Mac") && "ontouchend" in document);
     const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone;
@@ -32,7 +41,7 @@ export function usePush(userId: string, enabled: boolean) {
   }, [enabled]);
 
   useEffect(() => {
-    if (!enabled || !VAPID || !("serviceWorker" in navigator)) return;
+    if (!enabled || !("serviceWorker" in navigator)) return void refresh();
     navigator.serviceWorker.register("/sw.js").then(refresh, refresh);
   }, [enabled, refresh]);
 
@@ -53,7 +62,7 @@ export function usePush(userId: string, enabled: boolean) {
       return false;
     }
     const reg = await navigator.serviceWorker.ready;
-    const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID) }));
+    const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(await getKey()) }));
     const j = sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
     const { error } = await getSupabase()
       .from("push_subscriptions")
