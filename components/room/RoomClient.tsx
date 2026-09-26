@@ -23,6 +23,7 @@ import { PollSheet } from "./PollSheet";
 import { CountdownSheet, daysUntil } from "./CountdownSheet";
 import { PlayRequestCard, REQUEST_SECONDS } from "./PlayRequestCard";
 import { GameSheet, newGameState, turnOf } from "@/components/games/GameSheet";
+import { GamesList } from "./LibraryPanel";
 import { gameInfo, type GameKind, type GameRow } from "@/lib/games/types";
 import { questionOfTheDay } from "@/lib/questions";
 import { updateAppBadge } from "@/lib/badge";
@@ -1343,6 +1344,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   // ── Couple games (v6) ──────────────────────────────────────────────
   const [games, setGames] = useState<GameRow[]>([]);
   const [openGame, setOpenGame] = useState<string | null>(null);
+  const [gamesPicker, setGamesPicker] = useState(false);
   const loadGames = useCallback(async () => {
     const { data } = await supabase.from("games").select("*").eq("room_id", room.id).eq("status", "active").order("updated_at", { ascending: false }).limit(10);
     setGames((data ?? []) as GameRow[]);
@@ -1540,6 +1542,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   useBackToClose(renameOpen, () => setRenameOpen(false));
   useBackToClose(inviteOpen && !partner, () => setInviteOpen(false));
   useBackToClose(pinSheet, () => setPinSheet(false));
+  useBackToClose(gamesPicker, () => setGamesPicker(false));
 
   // ── Delete / leave the room (v5) ──────────────────────────────────
   const router = useRouter();
@@ -1714,6 +1717,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           banner={banner}
           prefill={prefill}
           onOpenGame={features.v6 ? setOpenGame : undefined}
+          onGames={features.v6 ? () => setGamesPicker(true) : undefined}
           closedNotice={
             closed ? (
               <div className="flex items-center gap-3 rounded-2xl bg-zinc-900/90 p-3 pl-4 text-sm ring-1 ring-white/10">
@@ -1830,6 +1834,29 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         />
       )}
       {burst.layer}
+      {gamesPicker && (
+        <div className="vv-fixed z-[55] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center" onClick={() => setGamesPicker(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="animate-rise max-h-[85%] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[2rem] bg-[#1d1419] pt-5 pb-[max(env(safe-area-inset-bottom),20px)] ring-1 ring-white/10 sm:rounded-[2rem]"
+          >
+            <h2 className="px-5 pb-3 font-display text-2xl italic">🎮 Games</h2>
+            <GamesList
+              active={games}
+              start={(k) => {
+                setGamesPicker(false);
+                void startGame(k);
+              }}
+              open={(id) => {
+                setGamesPicker(false);
+                setOpenGame(id);
+              }}
+              turnOf={turnOf}
+              meId={me.id}
+            />
+          </div>
+        </div>
+      )}
       {openGame && <GameSheet gameId={openGame} meId={me.id} nameOf={nameOf} onClose={() => setOpenGame(null)} onError={showToast} />}
       {incoming && <PlayRequestCard key={incoming.id} fromName={incoming.fromName} track={incoming.track} onAnswer={answerRequest} />}
 

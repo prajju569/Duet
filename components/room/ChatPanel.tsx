@@ -49,6 +49,8 @@ type Props = {
   prefill?: { text: string; n: number } | null;
   onPin?: (messageId: string) => void;
   onOpenGame?: (gameId: string) => void;
+  /** ＋ → 🎮 Games */
+  onGames?: () => void;
   pinnedId?: string | null;
   /** v4: send later */
   onSchedule?: (body: string, at: Date) => Promise<boolean>;
@@ -569,6 +571,19 @@ export function ChatPanel(props: Props) {
                         className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
                       >
                         🕛 <span>Send later</span>
+                      </button>
+                    )}
+                    {props.onGames && (
+                      <button
+                        type="button"
+                        aria-label="Games"
+                        onClick={() => {
+                          setMore(false);
+                          props.onGames!();
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                      >
+                        🎮 <span>Games</span>
                       </button>
                     )}
                     {props.onPoll && (

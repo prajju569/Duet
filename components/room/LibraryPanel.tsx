@@ -159,7 +159,7 @@ export function LibraryPanel(props: Props) {
 
 
 /** 🎮 Games: continue a game in progress, or start a new one. */
-function GamesList({ active, start, open, turnOf, meId }: NonNullable<Props["games"]>) {
+export function GamesList({ active, start, open, turnOf, meId }: NonNullable<Props["games"]>) {
   return (
     <div className="px-2">
       {active.length > 0 && (
