@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { updateAppBadge } from "@/lib/badge";
 import { getSupabase } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
@@ -230,54 +231,58 @@ export function RoomsList({ rooms: initial, meId }: { rooms: HomeRoom[]; meId: s
         </button>
       )}
 
-      {menuFor && (
-        <div className="vv-fixed z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center" onClick={() => setMenuFor(null)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="animate-rise w-full max-w-md rounded-t-[2rem] bg-[#1d1419] p-3 pb-[max(env(safe-area-inset-bottom),16px)] ring-1 ring-white/10 sm:rounded-[2rem]"
-          >
-            <div className="px-3 pt-2 pb-3 font-display text-xl italic">{menuFor.name}</div>
-            {(
-              [
-                ["pinned", menuFor.pinned ? "📌 Unpin" : "📌 Pin to top"],
-                ["muted", menuFor.muted ? "🔔 Unmute" : "🔕 Mute notifications"],
-                ["marked_unread", menuFor.marked_unread ? "✅ Mark as read" : "🔴 Mark as unread"],
-                ["archived", menuFor.archived ? "🗄️ Unarchive" : "🗄️ Archive"],
-              ] as const
-            ).map(([key, label]) => (
+      {menuFor &&
+        createPortal(
+          <div className="vv-fixed z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center" onClick={() => setMenuFor(null)}>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="animate-rise w-full max-w-md rounded-t-[2rem] bg-[#1d1419] p-3 pb-[max(env(safe-area-inset-bottom),16px)] ring-1 ring-white/10 sm:rounded-[2rem]"
+            >
+              <div className="px-3 pt-2 pb-3 font-display text-xl italic">{menuFor.name}</div>
+              {(
+                [
+                  ["pinned", menuFor.pinned ? "📌 Unpin" : "📌 Pin to top"],
+                  ["muted", menuFor.muted ? "🔔 Unmute" : "🔕 Mute notifications"],
+                  ["marked_unread", menuFor.marked_unread ? "✅ Mark as read" : "🔴 Mark as unread"],
+                  ["archived", menuFor.archived ? "🗄️ Unarchive" : "🗄️ Archive"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setPref(menuFor, key, !menuFor[key])}
+                  className="flex w-full items-center rounded-2xl px-3 py-3.5 text-left text-[15px] hover:bg-white/8 active:bg-white/10"
+                >
+                  {label}
+                </button>
+              ))}
               <button
-                key={key}
-                onClick={() => setPref(menuFor, key, !menuFor[key])}
+                onClick={() => {
+                  setRenaming(menuFor);
+                  setDraft(menuFor.name);
+                  setErr(null);
+                  setMenuFor(null);
+                }}
                 className="flex w-full items-center rounded-2xl px-3 py-3.5 text-left text-[15px] hover:bg-white/8 active:bg-white/10"
               >
-                {label}
+                ✏️ Rename
               </button>
-            ))}
-            <button
-              onClick={() => {
-                setRenaming(menuFor);
-                setDraft(menuFor.name);
-                setErr(null);
-                setMenuFor(null);
-              }}
-              className="flex w-full items-center rounded-2xl px-3 py-3.5 text-left text-[15px] hover:bg-white/8 active:bg-white/10"
-            >
-              ✏️ Rename
-            </button>
-          </div>
-        </div>
-      )}
+            </div>
+          </div>,
+          document.body, // the page's entrance animation would otherwise trap this sheet
+        )}
 
-      {renaming && (
-        <RenameSheet
-          value={draft}
-          onChange={setDraft}
-          onSubmit={saveName}
-          onClose={() => setRenaming(null)}
-          busy={busy}
-          error={err}
-        />
-      )}
+      {renaming &&
+        createPortal(
+          <RenameSheet
+            value={draft}
+            onChange={setDraft}
+            onSubmit={saveName}
+            onClose={() => setRenaming(null)}
+            busy={busy}
+            error={err}
+          />,
+          document.body,
+        )}
     </>
   );
 }

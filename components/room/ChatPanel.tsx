@@ -136,7 +136,7 @@ export function ChatPanel(props: Props) {
     if (!el) return;
     if (stickRef.current) el.scrollTop = el.scrollHeight;
     else if (added > 0) setUnseenBelow((n) => n + added);
-  }, [messages.length, partnerTyping]);
+  }, [messages.length, partnerTyping, props.scheduled?.length]);
 
   // Opening a room with unread messages → start at the first one (if they don't all fit).
   const openedAtUnread = useRef(false);
@@ -651,6 +651,7 @@ export function ChatPanel(props: Props) {
             if (await props.onSchedule!(text.trim(), at)) {
               setText("");
               props.onTyping(false);
+              stickRef.current = true; // show the new "🕛 scheduled" bubble
             }
           }}
         />
