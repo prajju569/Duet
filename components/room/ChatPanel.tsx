@@ -22,7 +22,7 @@ const canEditMsg = (m: Message) =>
   m.kind === "text" && !m.deleted_at && !m.pending && Date.now() - new Date(m.created_at).getTime() < 24 * 3600 * 1000;
 import { ChevronDown, ClockIcon, CheckIcon, DoubleCheckIcon, ReplyIcon, SendIcon, XIcon } from "@/components/ui/Icons";
 
-const EMOJIS = ["❤️", "😂", "🥹", "😮", "🔥", "👍"];
+const EMOJIS = ["❤️", "😂", "🥹", "💃", "😮", "🔥", "👍"];
 /** How far (px) a message must be dragged to trigger a reply. */
 const SWIPE_TRIGGER = 56;
 const SWIPE_MAX = 84;
@@ -976,13 +976,13 @@ function BurstButton({ onBurst }: { onBurst: (emoji: string) => void }) {
       {tray && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setTray(false)} />
-          <div className="animate-pop absolute bottom-13 left-0 z-40 flex gap-1 rounded-full bg-zinc-900/95 p-1.5 shadow-xl ring-1 ring-white/10">
+          <div className="animate-pop absolute bottom-13 left-0 z-40 flex gap-0.5 rounded-full bg-zinc-900/95 p-1.5 shadow-xl ring-1 ring-white/10">
             {BURST_EMOJIS.map((e) => (
               <button
                 key={e}
                 type="button"
                 onClick={() => onBurst(e)}
-                className="flex size-10 items-center justify-center rounded-full text-2xl transition hover:scale-125 active:scale-90"
+                className="flex size-9 items-center justify-center rounded-full text-[22px] transition hover:scale-125 active:scale-90"
               >
                 {e}
               </button>

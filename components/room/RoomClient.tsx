@@ -23,6 +23,7 @@ import { PollSheet } from "./PollSheet";
 import { CountdownSheet, daysUntil } from "./CountdownSheet";
 import { PlayRequestCard, REQUEST_SECONDS } from "./PlayRequestCard";
 import { GameSheet, newGameState, turnOf } from "@/components/games/GameSheet";
+import { GameChat } from "@/components/games/GameChat";
 import { GamesList } from "./LibraryPanel";
 import { gameInfo, type GameKind, type GameRow } from "@/lib/games/types";
 import { questionOfTheDay } from "@/lib/questions";
@@ -1857,7 +1858,27 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           </div>
         </div>
       )}
-      {openGame && <GameSheet gameId={openGame} meId={me.id} nameOf={nameOf} onClose={() => setOpenGame(null)} onError={showToast} />}
+      {openGame && (
+        <GameSheet
+          gameId={openGame}
+          meId={me.id}
+          nameOf={nameOf}
+          onClose={() => setOpenGame(null)}
+          onError={showToast}
+          chat={
+            <GameChat
+              messages={messages}
+              meId={me.id}
+              partnerName={nameOf(partner?.userId)}
+              partnerTyping={partnerTyping || (partnerSearching ? "searching" : false)}
+              onSend={(text) => void sendMessageRef.current(text, null)}
+              onBurst={sendBurst}
+              onTyping={sendTyping}
+              onReact={react}
+            />
+          }
+        />
+      )}
       {incoming && <PlayRequestCard key={incoming.id} fromName={incoming.fromName} track={incoming.track} onAnswer={answerRequest} />}
 
       {renameOpen && (

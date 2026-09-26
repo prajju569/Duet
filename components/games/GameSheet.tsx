@@ -56,12 +56,15 @@ export function GameSheet({
   nameOf,
   onClose,
   onError,
+  chat,
 }: {
   gameId: string;
   meId: string;
   nameOf: (id: string | null | undefined) => string;
   onClose: () => void;
   onError: (msg: string) => void;
+  /** The room chat, docked under the board. */
+  chat?: React.ReactNode;
 }) {
   const supabase = getSupabase();
   const [game, setGame] = useState<GameRow | null>(null);
@@ -144,7 +147,7 @@ export function GameSheet({
           <span className="w-12" />
         )}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-2 pb-[max(env(safe-area-inset-bottom),20px)]">
+      <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-2 ${chat ? "pb-4" : "pb-[max(env(safe-area-inset-bottom),20px)]"}`}>
         {!game ? (
           <p className="mt-20 text-center text-cream/50">Loading the game…</p>
         ) : game.status === "ended" ? (
@@ -161,6 +164,7 @@ export function GameSheet({
           </div>
         )}
       </div>
+      {chat}
     </div>
   );
 }

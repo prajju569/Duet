@@ -109,7 +109,7 @@ export function TruthOrDare({ state, meIdx, names, commit }: BoardProps<TodState
         <>
           <div className="mt-3 text-xs font-semibold tracking-wide text-rose-200 uppercase">{state.pick === "truth" ? "🤫 Truth" : "🔥 Dare"}</div>
           <div className="mt-2 text-center font-display text-2xl leading-snug italic">{text}</div>
-          <p className="mt-3 text-center text-xs text-cream/50">{myTurn ? "Answer in the chat 💬 then tap Done" : `Waiting for ${who} to answer in the chat…`}</p>
+          <p className="mt-3 text-center text-xs text-cream/50">{myTurn ? "Answer in the chat below 👇 then tap Done" : `${who} is answering — chat below 👇`}</p>
           {myTurn && (
             <div className="mt-4 flex gap-2">
               <button onClick={() => commit(pickTod({ ...state }, state.pick!), "active")} className="rounded-full bg-white/8 px-4 py-2 text-sm ring-1 ring-white/10">

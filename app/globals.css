@@ -155,8 +155,46 @@ body {
   12% { opacity: 1; }
   100% { opacity: 0; transform: translate3d(var(--drift), -85vh, 0) scale(1.15) rotate(12deg); }
 }
+/* 💃 / 🕺 bursts: the emojis bop side to side while they float, and a big one dances mid-screen. */
+.dance-groove {
+  animation: dance-groove 0.42s ease-in-out infinite alternate;
+  transform-origin: 50% 90%;
+}
+@keyframes dance-groove {
+  0% { transform: rotate(-14deg) translateY(0); }
+  50% { transform: rotate(0deg) translateY(-12%) scale(1.05, 0.95); }
+  100% { transform: rotate(14deg) translateY(0); }
+}
+.dance-star {
+  animation: dance-star 3.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  filter: drop-shadow(0 10px 30px rgb(0 0 0 / 0.45));
+}
+@keyframes dance-star {
+  0% { opacity: 0; transform: translate(-50%, 30px) scale(0.3); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
+  20% { transform: translate(-50%, 0) scale(1); }
+  85% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -40px) scale(0.8); }
+}
+/* Ludo: shaking dice, glowing movable tokens, "roll me" pulse. */
+.ludo-roll { animation: ludo-roll 0.35s ease-in-out infinite; }
+@keyframes ludo-roll {
+  0% { transform: rotate(0) translateY(0); }
+  25% { transform: rotate(-18deg) translateY(-8px); }
+  50% { transform: rotate(10deg) translateY(0); }
+  75% { transform: rotate(20deg) translateY(-5px); }
+  100% { transform: rotate(0) translateY(0); }
+}
+.ludo-glow { animation: ludo-glow 0.9s ease-in-out infinite alternate; }
+@keyframes ludo-glow { from { opacity: 0.45; } to { opacity: 1; } }
+.ludo-ready { animation: ludo-ready 1.2s ease-in-out infinite; }
+@keyframes ludo-ready {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ring) 70%, transparent); }
+  50% { box-shadow: 0 0 0 10px transparent; }
+}
 @media (prefers-reduced-motion: reduce) {
   .emoji-float { animation-duration: 1ms !important; }
+  .dance-groove, .dance-star { animation: none; }
 }
 
 /* Now Playing album art: the biggest square that fits the space left over. */
