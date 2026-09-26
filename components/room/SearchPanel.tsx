@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { parseYouTubeId } from "@/lib/youtubeUrl";
+import { parsePlaylistLink, parseYouTubeId } from "@/lib/youtubeUrl";
 import type { Track } from "@/lib/types";
 import { HeartIcon, PlusIcon, SearchIcon } from "@/components/ui/Icons";
 import { IconButton, TrackRow } from "./TrackRow";
@@ -13,16 +13,25 @@ type Props = {
   onQueue: (t: Track) => void;
   onToggleFavourite: (t: Track) => void;
   onError: (msg: string) => void;
+  /** Bulk actions for an imported playlist. */
+  onImport?: (tracks: Track[], where: "queue" | "ours" | "mine") => Promise<void>;
 };
+
+type Imported = { title: string; skipped: number; truncated: boolean };
 
 // Keep results while switching tabs.
 let lastQuery = "";
 let lastResults: Track[] = [];
+let lastPlaylist: Imported | null = null;
+const isLink = (t: string) => !!parseYouTubeId(t) || !!parsePlaylistLink(t);
 
-export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, onError, onDedicate }: Props) {
+export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, onError, onDedicate, onImport }: Props) {
   const [q, setQ] = useState(lastQuery);
   const [results, setResults] = useState<Track[]>(lastResults);
   const [loading, setLoading] = useState(false);
+  const [playlist, setPlaylist] = useState<Imported | null>(lastPlaylist);
+  const [importing, setImporting] = useState<string | null>(null);
+  const [done, setDone] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Search on submit (not per keystroke) — each YouTube search costs quota.
@@ -36,14 +45,22 @@ export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, o
     setLoading(true);
     inputRef.current?.blur();
     try {
-      // A pasted YouTube link → that exact video (costs no search quota).
-      const linkId = parseYouTubeId(query);
-      const res = await fetch(linkId ? `/api/oembed?id=${linkId}` : `/api/search?q=${encodeURIComponent(query)}`);
+      // A playlist / album link → all its songs. A song link → that exact video (no search quota).
+      const list = parsePlaylistLink(query);
+      if (list && "error" in list) throw new Error(list.error);
+      const linkId = list ? null : parseYouTubeId(query);
+      const res = await fetch(
+        list ? `/api/playlist?id=${list.id}` : linkId ? `/api/oembed?id=${linkId}` : `/api/search?q=${encodeURIComponent(query)}`,
+      );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Search failed");
+      if (list && !json.items.length) throw new Error("No playable songs in that playlist.");
       lastQuery = query;
       lastResults = json.items;
+      lastPlaylist = list ? { title: json.title, skipped: json.skipped, truncated: json.truncated } : null;
       setResults(json.items);
+      setPlaylist(lastPlaylist);
+      setDone([]);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Search failed");
     } finally {
@@ -61,18 +78,54 @@ export function SearchPanel({ isFavourite, onPlay, onQueue, onToggleFavourite, o
           onChange={(e) => setQ(e.target.value)}
           onPaste={(e) => {
             const pasted = e.clipboardData.getData("text");
-            if (parseYouTubeId(pasted)) {
+            if (isLink(pasted)) {
               e.preventDefault();
               setQ(pasted.trim());
               void runSearch(pasted.trim());
             }
           }}
-          placeholder="Kesariya, Arijit… or paste a YouTube link"
+          placeholder="Kesariya, Arijit… or paste a song / playlist link"
           enterKeyHint="search"
           className="h-11 min-w-0 flex-1 bg-transparent text-base placeholder:text-cream/35 focus:outline-none"
         />
         {loading && <span className="size-4 animate-spin rounded-full border-2 border-cream/30 border-t-cream" />}
       </form>
+
+      {playlist && onImport && (
+        <div className="animate-rise mx-2 mt-3 rounded-2xl bg-white/6 p-3.5 ring-1 ring-white/10">
+          <div className="text-[11px] font-semibold tracking-wide text-cream/45 uppercase">Playlist</div>
+          <div className="truncate font-display text-lg italic">{playlist.title}</div>
+          <div className="text-xs text-cream/50">
+            {results.length} songs
+            {playlist.skipped ? ` · ${playlist.skipped} can't play outside YouTube, skipped` : ""}
+            {playlist.truncated ? " · first 200 only" : ""}
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {(
+              [
+                ["queue", "➕", "Add all to Up next"],
+                ["ours", "🎶", "Save to Our Songs"],
+                ["mine", "♥", "Save to my favourites"],
+              ] as const
+            ).map(([where, icon, label]) => (
+              <button
+                key={where}
+                disabled={!!importing || done.includes(where)}
+                onClick={async () => {
+                  setImporting(where);
+                  await onImport(results, where);
+                  setImporting(null);
+                  setDone((d) => [...d, where]);
+                }}
+                className="flex flex-col items-center gap-1 rounded-xl bg-white/8 px-1 py-2 text-[11.5px] leading-tight font-medium ring-1 ring-white/10 transition active:scale-95 disabled:opacity-50"
+              >
+                <span className="text-base leading-none">{importing === where ? "⏳" : done.includes(where) ? "✅" : icon}</span>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <ul className="mt-3 space-y-0.5">
         {results.map((t) => (

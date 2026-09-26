@@ -45,6 +45,7 @@ type Props = {
   isFavourite: (videoId: string | null | undefined) => boolean;
   onToggleFavourite: (t: Track) => void;
   onAddToQueue: (t: Track) => void;
+  onImport?: (tracks: Track[], where: "queue" | "ours" | "mine") => Promise<void>;
   onRemoveFromQueue: (id: string) => void;
   onError: (msg: string) => void;
 };
@@ -159,6 +160,7 @@ export function PlayerPanel(props: Props) {
           onQueue={props.onAddToQueue}
           onToggleFavourite={onToggleFavourite}
           onError={props.onError}
+          onImport={props.onImport}
         />
       )}
       {tab === "library" && (

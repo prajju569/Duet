@@ -992,6 +992,45 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     [supabase, room.id, me.id, showToast],
   );
 
+  /** A whole playlist at once: into Up next, Our Songs, or my favourites (duplicates skipped). */
+  const importTracks = useCallback(
+    async (tracks: Track[], where: "queue" | "ours" | "mine") => {
+      const base = { title: "", channel: null as string | null, thumbnail: null as string | null, duration_sec: null as number | null };
+      const row = (t: Track) => ({ ...base, video_id: t.videoId, title: t.title, channel: t.channel, thumbnail: t.thumbnail, duration_sec: t.durationSec });
+      let error: { message: string } | null = null;
+      if (where === "queue") {
+        const start = Date.now() / 1000;
+        ({ error } = await supabase.from("queue_items").insert(
+          tracks.map((t, i) => ({ ...row(t), room_id: room.id, added_by: me.id, ...(features.v2 ? { position: start + i / 1000 } : {}) })),
+        ));
+      } else if (where === "ours") {
+        ({ error } = await supabase
+          .from("room_songs")
+          .upsert(tracks.map((t) => ({ ...row(t), room_id: room.id, added_by: me.id })), { onConflict: "room_id,video_id", ignoreDuplicates: true }));
+        if (!error) void loadOurSongs();
+      } else {
+        ({ error } = await supabase
+          .from("favourites")
+          .upsert(tracks.map((t) => ({ ...row(t), user_id: me.id })), { onConflict: "user_id,video_id", ignoreDuplicates: true }));
+        if (!error) {
+          const { data } = await supabase.from("favourites").select("*").eq("user_id", me.id).order("created_at", { ascending: false });
+          if (data) setFavourites(data as Favourite[]);
+        }
+      }
+      const n = tracks.length;
+      showToast(
+        error
+          ? "Couldn't import — try again"
+          : where === "queue"
+            ? `➕ ${n} songs added to Up next`
+            : where === "ours"
+              ? `🎶 ${n} songs saved to Our Songs`
+              : `♥ ${n} songs saved to your favourites`,
+      );
+    },
+    [supabase, room.id, me.id, features.v2, loadOurSongs, showToast],
+  );
+
   const removeFromQueue = useCallback(
     async (id: string) => {
       setQueue((prev) => prev.filter((q) => q.id !== id));
@@ -1088,6 +1127,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           isFavourite={isFavourite}
           onToggleFavourite={toggleFavourite}
           onAddToQueue={addToQueue}
+          onImport={importTracks}
           onRemoveFromQueue={removeFromQueue}
           onError={showToast}
         />

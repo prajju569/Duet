@@ -15,3 +15,18 @@ describe("parseYouTubeId", () => {
     expect(parseYouTubeId("https://example.com/watch?v=BddP6PYo2gs")).toBeNull();
   });
 });
+
+import { parsePlaylistLink } from "./youtubeUrl";
+describe("parsePlaylistLink", () => {
+  it("reads YouTube Music + YouTube playlist and album links", () => {
+    expect(parsePlaylistLink("https://music.youtube.com/playlist?list=PLx7a_Hj-B2c&si=q")).toEqual({ id: "PLx7a_Hj-B2c" });
+    expect(parsePlaylistLink("https://youtube.com/playlist?list=OLAK5uy_kAbc123")).toEqual({ id: "OLAK5uy_kAbc123" });
+    expect(parsePlaylistLink("https://www.youtube.com/watch?v=BddP6PYo2gs&list=PLabc")).toEqual({ id: "PLabc" });
+  });
+  it("explains private lists, ignores mixes and plain links", () => {
+    expect(parsePlaylistLink("https://music.youtube.com/playlist?list=LM")).toHaveProperty("error");
+    expect(parsePlaylistLink("https://music.youtube.com/watch?v=BddP6PYo2gs&list=RDAMVM")).toBeNull();
+    expect(parsePlaylistLink("https://youtu.be/BddP6PYo2gs")).toBeNull();
+    expect(parsePlaylistLink("kesariya")).toBeNull();
+  });
+});
