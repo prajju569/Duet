@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBackToClose } from "@/lib/backStack";
+import { useRouter } from "next/navigation";
+import { confirmAndDeleteRoom } from "@/lib/deleteRoom";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { usePlaybackSync } from "@/hooks/usePlaybackSync";
@@ -139,6 +141,7 @@ type Props = {
     scheduled?: ScheduledSong | null;
     countdown?: Countdown | null;
     pinnedMessage?: string | null;
+    closed?: boolean;
   };
   me: { id: string; name: string; username: string | null };
   initialMembers: Member[];
@@ -181,6 +184,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const [scheduled, setScheduled] = useState<ScheduledSong | null>(room.scheduled ?? null);
   const [sheet, setSheet] = useState<"theme" | "schedule" | "poll" | "countdown" | null>(null);
   const [countdown, setCountdown] = useState<Countdown | null>(room.countdown ?? null);
+  const [closed, setClosed] = useState(!!room.closed);
   const [votes, setVotes] = useState<PollVote[]>([]);
   const [pinnedId, setPinnedId] = useState<string | null>(room.pinnedMessage ?? null);
   const [pinnedMsg, setPinnedMsg] = useState<Message | null>(null);
@@ -422,6 +426,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       })),
     );
   }, [supabase, room.id]);
+
+  const loadMembersRef = useRef(loadMembers);
+  loadMembersRef.current = loadMembers;
 
   // (No initial client fetch: the server already sent messages, queue & favourites.
   //  loadMessages / loadQueue run again only after a reconnect, to fill gaps.)
@@ -730,6 +737,10 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         if ("scheduled" in r) setScheduled(r.scheduled ?? null);
         if ("countdown" in r) setCountdown((r as { countdown?: Countdown | null }).countdown ?? null);
         if ("pinned_message" in r) setPinnedId((r as { pinned_message?: string | null }).pinned_message ?? null);
+        if ((r as { closed?: boolean }).closed) {
+          setClosed(true);
+          void loadMembersRef.current(); // they left
+        }
       })
       .subscribe();
     return () => {
@@ -1354,6 +1365,13 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   useBackToClose(inviteOpen && !partner, () => setInviteOpen(false));
   useBackToClose(pinSheet, () => setPinSheet(false));
 
+  // ── Delete / leave the room (v5) ──────────────────────────────────
+  const router = useRouter();
+  const deleteRoom = useCallback(async () => {
+    const result = await confirmAndDeleteRoom(room.id, roomName, partner ? firstName(partner.name) : null);
+    if (result) router.replace("/");
+  }, [room.id, roomName, partner, router]);
+
   // Slim bar at the top of the chat: countdown, or "invite to listen".
   const partnerListening = !!(partner && presence[partner.userId]?.listening && presence[partner.userId]?.active !== false);
   const days = countdown ? daysUntil(countdown.date) : null;
@@ -1422,7 +1440,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       muted={features.v4 ? myMuted : undefined}
       onMute={features.v4 ? toggleMute : undefined}
       onSearch={() => setSearchOpen(true)}
-      onCountdown={features.v4 ? () => setSheet("countdown") : undefined}
+      onCountdown={features.v4 && !closed ? () => setSheet("countdown") : undefined}
+      onDelete={features.v5 ? deleteRoom : undefined}
+      closed={closed}
       onTheme={features.v2 ? () => setSheet("theme") : undefined}
       onSchedule={features.v2 ? () => setSheet("schedule") : undefined}
       togetherText={features.v2 && listened >= 60 ? togetherText(listened) : null}
@@ -1506,6 +1526,16 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           onVote={features.v4 ? vote : undefined}
           banner={banner}
           prefill={prefill}
+          closedNotice={
+            closed ? (
+              <div className="flex items-center gap-3 rounded-2xl bg-zinc-900/90 p-3 pl-4 text-sm ring-1 ring-white/10">
+                <span className="min-w-0 flex-1 text-cream/75">👋 Your partner left, so this room is closed. You can still read it.</span>
+                <button onClick={() => void deleteRoom()} className="shrink-0 rounded-full bg-rose-300/15 px-3.5 py-2 font-semibold text-rose-200 ring-1 ring-rose-200/20">
+                  Delete
+                </button>
+              </div>
+            ) : undefined
+          }
           onSchedule={features.v4 ? scheduleMessage : undefined}
           scheduled={scheduledMsgs}
           onCancelScheduled={cancelScheduled}

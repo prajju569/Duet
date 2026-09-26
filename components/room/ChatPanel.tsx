@@ -43,6 +43,8 @@ type Props = {
   onVote?: (messageId: string, choice: number) => void;
   /** Slim bar pinned to the top of the chat (countdown, listen invite). */
   banner?: React.ReactNode;
+  /** Room closed (partner left): shown instead of the message box. */
+  closedNotice?: React.ReactNode;
   /** Put this text in the message box (e.g. today's question). */
   prefill?: { text: string; n: number } | null;
   onPin?: (messageId: string) => void;
@@ -506,7 +508,9 @@ export function ChatPanel(props: Props) {
             </button>
           </div>
         )}
-        {recording ? (
+        {props.closedNotice ? (
+          props.closedNotice
+        ) : recording ? (
           <VoiceRecorder
             onCancel={() => {
               setRecording(false);

@@ -5,6 +5,7 @@ import { useBackToClose } from "@/lib/backStack";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { updateAppBadge } from "@/lib/badge";
+import { confirmAndDeleteRoom } from "@/lib/deleteRoom";
 import { getSupabase } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
 import { firstName } from "@/lib/format";
@@ -76,7 +77,7 @@ function when(iso: string | null) {
   return d.toLocaleDateString([], { day: "numeric", month: "short" });
 }
 
-export function RoomsList({ rooms: initial, meId }: { rooms: HomeRoom[]; meId: string }) {
+export function RoomsList({ rooms: initial, meId, canDelete = false }: { rooms: HomeRoom[]; meId: string; canDelete?: boolean }) {
   const supabase = getSupabase();
   const [rooms, setRooms] = useState(initial);
   const [renaming, setRenaming] = useState<HomeRoom | null>(null);
@@ -269,6 +270,19 @@ export function RoomsList({ rooms: initial, meId }: { rooms: HomeRoom[]; meId: s
               >
                 ✏️ Rename
               </button>
+              {canDelete && (
+                <button
+                  onClick={async () => {
+                    const r = menuFor;
+                    setMenuFor(null);
+                    const result = await confirmAndDeleteRoom(r.id, r.name, r.partner_name ? firstName(r.partner_name) : null);
+                    if (result) setRooms((rs) => rs.filter((x) => x.id !== r.id));
+                  }}
+                  className="flex w-full items-center rounded-2xl px-3 py-3.5 text-left text-[15px] text-rose-300 hover:bg-white/8 active:bg-white/10"
+                >
+                  🗑️ Delete room
+                </button>
+              )}
             </div>
           </div>,
           document.body, // the page's entrance animation would otherwise trap this sheet

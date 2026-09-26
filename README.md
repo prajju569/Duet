@@ -28,6 +28,8 @@ You'll create three free accounts: **Supabase** (database and login), **Google C
    - **Project URL**, which looks like `https://abcd1234.supabase.co`
    - **anon public** key (it may be called the **publishable** key), a long string
 
+> **Duet v5 (delete rooms):** after deploying, run `supabase/migrations/20261003000000_leave_room.sql`. Until then the Delete option stays hidden.
+>
 > **Duet v4 (last seen, polls, pins, search, send later, countdown, mute/pin/archive rooms…):** after deploying, run `supabase/migrations/20261002000000_chat_extras.sql`. Until then those features simply stay hidden. It also switches on the database's minute timer (pg_cron) that delivers "Send later" messages even when both phones are off.
 >
 > **Duet v3 (private Duet IDs + richer rooms list):** after deploying, run `supabase/migrations/20261001000000_privacy_rooms.sql`. It hides everyone's Duet ID from other people (only you can see yours) and makes the rooms list show photos, voice notes and 💌 dedications properly.

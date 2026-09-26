@@ -35,7 +35,7 @@ export default async function RoomPage({
   ]);
   if (!profile?.display_name) redirect(`/?next=${encodeURIComponent(`/room/${code}`)}`);
   if (error || !room) {
-    const reason = error?.message.includes("ROOM_FULL") ? "full" : "notfound";
+    const reason = error?.message.includes("ROOM_FULL") ? "full" : error?.message.includes("ROOM_CLOSED") ? "closed" : "notfound";
     redirect(`/?error=${reason}`);
   }
 
@@ -79,10 +79,11 @@ export default async function RoomPage({
         scheduled: room.scheduled ?? null,
         countdown: room.countdown ?? null,
         pinnedMessage: room.pinned_message ?? null,
+        closed: !!room.closed,
       }}
       me={{ id: user.id, name: profile.display_name, username: profile.username ?? null }}
       openInvite={invite === "1" && members.length < 2}
-      features={{ v2: schemaVersion >= 2, v4: schemaVersion >= 4 }}
+      features={{ v2: schemaVersion >= 2, v4: schemaVersion >= 4, v5: schemaVersion >= 5 }}
       initialMembers={members}
       initial={{
         messages,

@@ -14,6 +14,7 @@ type Room = { id: string; code: string; name: string };
 const ERRORS: Record<string, string> = {
   full: "That room already has two people in it.",
   notfound: "No room with that code — double-check it?",
+  closed: "That room was closed — the other person deleted it.",
 };
 
 export function HomeClient({
@@ -21,6 +22,7 @@ export function HomeClient({
   displayName,
   username,
   rooms,
+  canDelete = false,
   meId,
   next,
   error,
@@ -29,6 +31,7 @@ export function HomeClient({
   displayName: string | null;
   username: string | null;
   rooms: HomeRoom[];
+  canDelete?: boolean;
   meId: string;
   next: string | null;
   error: string | null;
@@ -174,7 +177,7 @@ export function HomeClient({
             <div className="mt-10">
               <h2 className="text-xs tracking-[0.2em] text-cream/45 uppercase">Your rooms</h2>
               {rooms.length > 0 ? (
-                <RoomsList rooms={rooms} meId={meId} />
+                <RoomsList rooms={rooms} meId={meId} canDelete={canDelete} />
               ) : (
                 <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm text-cream/60 ring-1 ring-white/10">
                   No rooms on this account yet. Create one below.

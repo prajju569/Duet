@@ -30,6 +30,9 @@ type Props = {
   onMute?: () => void;
   onSearch?: () => void;
   onCountdown?: () => void;
+  onDelete?: () => void;
+  /** partner left: no invite / nudges */
+  closed?: boolean;
   push?: { status: string; toggle: () => void } | null;
 };
 
@@ -65,7 +68,7 @@ function Person({ userId, name, presence, isMe, lastSeen }: { userId: string; na
   );
 }
 
-export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onMissYou, onTheme, onSchedule, togetherText, push, lastSeen, muted, onMute, onSearch, onCountdown }: Props) {
+export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onMissYou, onTheme, onSchedule, togetherText, push, lastSeen, muted, onMute, onSearch, onCountdown, onDelete, closed }: Props) {
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
   useBackToClose(menu, () => setMenu(false));
@@ -89,7 +92,7 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
         ) : (
           <div className="min-w-0 leading-tight">
             <div className="truncate font-display text-[15px] italic">{roomName}</div>
-            <div className="text-[11px] text-cream/50">waiting for your person…</div>
+            <div className="text-[11px] text-cream/50">{closed ? "room closed" : "waiting for your person…"}</div>
           </div>
         )}
         <div className="hidden sm:block">
@@ -116,7 +119,7 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
           💭
         </button>
       )}
-      {!partner && (
+      {!partner && !closed && (
         <button
           onClick={onInvite}
           className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-medium text-cream/85 ring-1 ring-white/10 transition hover:bg-white/15 active:scale-95"
@@ -154,7 +157,7 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
               >
                 ✏️ <span>Rename room</span>
               </button>
-              {!partner && (
+              {!partner && !closed && (
                 <button
                   onClick={() => {
                     setMenu(false);
@@ -240,6 +243,17 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
               <Link href="/" className="flex w-full items-center gap-3 px-4 py-2.5 hover:bg-white/8">
                 🏠 <span>All rooms</span>
               </Link>
+              {onDelete && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    onDelete();
+                  }}
+                  className="flex w-full items-center gap-3 border-t border-white/8 px-4 py-2.5 text-left text-rose-300 hover:bg-white/8"
+                >
+                  🗑️ <span>Delete room</span>
+                </button>
+              )}
             </div>
           </>
         )}

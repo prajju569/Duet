@@ -14,6 +14,7 @@ const INVITE_ERRORS: Record<string, string> = {
   INVITE_EXPIRED: "This invite has expired — ask for a new link.",
   INVITE_INVALID: "This invite link isn't valid.",
   ROOM_FULL: "That room already has two people in it.",
+  ROOM_CLOSED: "That room was closed — ask for a new invite.",
 };
 
 async function inviteIsOpen(token: string) {

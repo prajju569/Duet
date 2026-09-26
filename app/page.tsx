@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMyProfile } from "@/lib/profile";
+import { getSchemaVersion } from "@/lib/features";
 import { HomeClient } from "./HomeClient";
 import type { HomeRoom } from "@/components/RoomsList";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -24,9 +25,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, rooms] = await Promise.all([
+  const [{ data: profile }, rooms, schemaVersion] = await Promise.all([
     getMyProfile(supabase, user.id).then((data) => ({ data })),
     loadRooms(supabase, user.id),
+    getSchemaVersion(supabase),
   ]);
 
   const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : null;
@@ -37,6 +39,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
       displayName={profile?.display_name ?? null}
       username={profile?.username ?? null}
       rooms={rooms}
+      canDelete={schemaVersion >= 5}
       meId={user.id}
       next={safeNext}
       error={error ?? null}
