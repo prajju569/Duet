@@ -190,7 +190,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const [channelKey, setChannelKey] = useState(0); // bump to tear down & rebuild realtime channels
   const connection = useConnectionStatus(connected, () => setChannelKey((k) => k + 1));
   const [joinTick, setJoinTick] = useState(0); // bumps on every (re)join of the room channel
-  const trackedRef = useRef<boolean | null>(null);
+  const trackedRef = useRef<string | null>(null);
+  const beatsRef = useRef<Record<string, { at: number; seen: number }>>({});
+  const presenceRef = useRef<Record<string, PresenceInfo>>({});
 
   const nameOf = useCallback(
     (userId: string | null | undefined) => {
@@ -226,15 +228,24 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
       localStorage.setItem("duet:push-prompt", "hide");
     } catch {}
   };
+  /** Is my partner looking at this room right now? Then no buzz — they'll see it anyway. */
+  const partnerWatching = useCallback(() => {
+    const p = Object.values(presenceRef.current).find((x) => x.userId !== me.id);
+    const beat = p && beatsRef.current[p.userId];
+    return !!(p?.active && beat && Date.now() - beat.seen < 45_000);
+  }, [me.id]);
+
   /** Ask the server to buzz my partner (it builds the text from the saved message). */
   const notifyPartner = useCallback(
-    (messageId: string) =>
+    (messageId: string) => {
+      if (partnerWatching()) return;
       void fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomId: room.id, kind: "message", messageId }),
-      }).catch(() => {}),
-    [room.id],
+      }).catch(() => {});
+    },
+    [room.id, partnerWatching],
   );
   const togglePush = useCallback(async () => {
     if (push.status === "on") {
@@ -268,12 +279,13 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     void roomChannelRef.current?.send({ type: "broadcast", event: "nudge", payload: { from: me.name } });
     burst.fire("💭");
     showToast("💭 Sent");
-    void fetch("/api/notify", {
+    if (!partnerWatching())
+      void fetch("/api/notify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roomId: room.id, kind: "nudge" }),
     }).catch(() => {});
-  }, [burst, me.name, room.id, showToast]);
+  }, [burst, me.name, room.id, showToast, partnerWatching]);
   const sendMessageRef = useRef<(body: string, replyTo?: string | null, extra?: { kind: Message["kind"]; meta: MessageMeta }) => Promise<void>>(
     async () => {},
   );
@@ -446,8 +458,12 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           const next: Record<string, PresenceInfo> = {};
           for (const [key, metas] of Object.entries(st)) {
             const last = metas[metas.length - 1];
-            if (last) next[key] = { userId: key, name: last.name, listening: metas.some((m) => m.listening) };
+            if (last) next[key] = { userId: key, name: last.name, listening: metas.some((m) => m.listening), active: metas.some((m) => m.active) };
+            // Remember when we last heard from them (our clock — theirs may be off).
+            const beat = Math.max(...metas.map((m) => Number((m as { at?: number }).at) || 0));
+            if (beat && beat !== beatsRef.current[key]?.at) beatsRef.current[key] = { at: beat, seen: Date.now() };
           }
+          presenceRef.current = next;
           setPresence(next);
         })
         .subscribe((status) => {
@@ -677,16 +693,50 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     };
   }, [supabase, room.id]);
 
-  // Keep presence "listening now" fresh — debounced, since Realtime rate-limits presence updates.
+  // Presence: "listening now" + whether the room is open on screen. While it's on screen we
+  // re-announce every 30s, so a phone that vanished without saying so goes stale quickly.
+  const [onScreen, setOnScreen] = useState(true);
+  useEffect(() => {
+    const on = () => setOnScreen(document.visibilityState === "visible");
+    on();
+    document.addEventListener("visibilitychange", on);
+    window.addEventListener("pagehide", on);
+    return () => {
+      document.removeEventListener("visibilitychange", on);
+      window.removeEventListener("pagehide", on);
+    };
+  }, []);
   useEffect(() => {
     if (!connected) return;
-    const t = setTimeout(() => {
-      if (trackedRef.current === player.listening) return;
-      trackedRef.current = player.listening;
-      void roomChannelRef.current?.track({ userId: me.id, name: me.name, listening: player.listening });
-    }, trackedRef.current === null ? 0 : 800);
-    return () => clearTimeout(t);
-  }, [player.listening, connected, joinTick, me.id, me.name]);
+    const send = () =>
+      void roomChannelRef.current?.track({ userId: me.id, name: me.name, listening: player.listening, active: onScreen, at: Date.now() });
+    const key = `${player.listening}:${onScreen}`;
+    // Leaving the screen is sent at once (the phone may freeze us any moment); the rest is debounced.
+    const t = setTimeout(
+      () => {
+        if (trackedRef.current !== key) {
+          trackedRef.current = key;
+          send();
+        }
+      },
+      trackedRef.current === null || !onScreen ? 0 : 800,
+    );
+    const beat = onScreen ? setInterval(send, 30_000) : undefined;
+    return () => {
+      clearTimeout(t);
+      clearInterval(beat);
+    };
+  }, [player.listening, onScreen, connected, joinTick, me.id, me.name]);
+
+  // Opening the room clears its notifications.
+  useEffect(() => {
+    if (!onScreen || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg?.getNotifications())
+      .then((list) => list?.forEach((n) => n.tag.endsWith(room.id) && n.close()))
+      .catch(() => {});
+  }, [onScreen, room.id, messages.length]);
 
   // Background gradient follows the song.
   useEffect(() => {

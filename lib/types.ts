@@ -79,6 +79,8 @@ export type PresenceInfo = {
   userId: string;
   name: string;
   listening: boolean;
+  /** Has the room open on screen right now (not in the background). */
+  active?: boolean;
 };
 
 /** Extra data carried by non-text messages. */
