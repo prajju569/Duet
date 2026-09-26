@@ -632,7 +632,7 @@ function Bubble({
               ? "rounded-3xl px-1 py-0.5"
               : `px-3.5 py-2 ${mine
               ? `bg-gradient-to-br from-rose-300 to-orange-200 text-ink ${tail ? "rounded-3xl rounded-br-md" : "rounded-3xl"}`
-              : `bg-white/10 text-cream ring-1 ring-white/5 backdrop-blur ${tail ? "rounded-3xl rounded-bl-md" : "rounded-3xl"}`}`
+              : `bg-[#2c2329]/95 text-cream ring-1 ring-white/10 ${tail ? "rounded-3xl rounded-bl-md" : "rounded-3xl"}`}`
           } ${m.failed ? "opacity-60" : ""}`}
         >
           {quote && (

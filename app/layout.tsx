@@ -21,6 +21,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#120c10",
+  // Duet is already dark: tells Android Chrome / Samsung "don't auto-darken this page"
+  // (their forced dark mode was turning bubbles invisible).
+  colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   // Stops iOS zooming into inputs / double-tap zoom — the #1 cause of "jumping" layouts.
