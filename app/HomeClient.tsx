@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase/client";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { QuickLoginSetup } from "@/components/QuickLoginSetup";
+import { UnsendLabelEditor } from "@/components/UnsendLabelEditor";
 import { RoomsList, type HomeRoom } from "@/components/RoomsList";
 import { ID_NAME_MSG, idLooksLikeName } from "@/lib/duetId";
 
@@ -23,6 +24,7 @@ export function HomeClient({
   username,
   rooms,
   canDelete = false,
+  canCustomUnsend = false,
   meId,
   next,
   error,
@@ -35,6 +37,8 @@ export function HomeClient({
   meId: string;
   next: string | null;
   error: string | null;
+  /** v8: pick your own "unsend" text */
+  canCustomUnsend?: boolean;
 }) {
   const supabase = getSupabase();
   const router = useRouter();
@@ -48,6 +52,7 @@ export function HomeClient({
       if (!username && !next && localStorage.getItem("duet:pin-skipped") === "1") setPinOpen(false);
     } catch {}
   }, [username, next]);
+  const [unsendOpen, setUnsendOpen] = useState(false);
   const [showId, setShowId] = useState(false); // Duet ID stays hidden on screen unless you tap
   const idMatchesName = !!myUsername && idLooksLikeName(myUsername, displayName);
   const [code, setCode] = useState("");
@@ -134,7 +139,16 @@ export function HomeClient({
                   </button>
                 </>
               )}
+              {canCustomUnsend && !unsendOpen && (
+                <>
+                  {" · "}
+                  <button onClick={() => setUnsendOpen(true)} className="text-cream/40 underline underline-offset-2">
+                    unsend text
+                  </button>
+                </>
+              )}
             </p>
+            {unsendOpen && <UnsendLabelEditor onClose={() => setUnsendOpen(false)} onSaved={setMsg} />}
             {myUsername && !pinOpen && (
               <p className="mt-1 text-xs text-cream/35">
                 Your Duet ID (only you see this):{" "}

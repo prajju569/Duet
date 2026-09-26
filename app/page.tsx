@@ -40,6 +40,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
       username={profile?.username ?? null}
       rooms={rooms}
       canDelete={schemaVersion >= 5}
+      canCustomUnsend={schemaVersion >= 8}
       meId={user.id}
       next={safeNext}
       error={error ?? null}

@@ -1035,7 +1035,7 @@ function MessageBody({
   onOpenGame?: (gameId: string) => void;
 }) {
   if (m.deleted_at) {
-    // Accounts with their own "unsend" text (a private per-account setting) show that instead.
+    // People can pick their own "unsend" text (Home → unsend text) — show theirs instead.
     const custom = m.body && m.body !== "Message deleted" ? m.body : null;
     return custom ? <span className="italic opacity-80">🙊 {custom}</span> : <span className="italic opacity-60">🚫 Message deleted</span>;
   }
