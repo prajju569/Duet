@@ -27,7 +27,7 @@ export function useEmojiBurst() {
     }));
     setParticles((p) => [...p, ...batch]);
     const ids = new Set(batch.map((b) => b.id));
-    setTimeout(() => setParticles((p) => p.filter((x) => !ids.has(x.id))), 5000);
+    setTimeout(() => setParticles((p) => p.filter((x) => !ids.has(x.id))), dance ? 5600 : 4000);
     if (dance) {
       // One big dancer grooves in the middle of the screen for a few seconds.
       const id = ++idRef.current;
