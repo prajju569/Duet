@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useBackToClose } from "@/lib/backStack";
 import { createPortal } from "react-dom";
 import type { Message } from "@/lib/types";
 import { signedUrl } from "@/lib/media";
@@ -24,6 +25,7 @@ function useMediaUrl(m: Message) {
 export function ImageMessage({ m }: { m: Message }) {
   const url = useMediaUrl(m);
   const [open, setOpen] = useState(false);
+  useBackToClose(open, () => setOpen(false));
   const w = m.meta?.width || 4, h = m.meta?.height || 3;
   return (
     <>

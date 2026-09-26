@@ -1,6 +1,7 @@
 "use client";
 
 import { centerIn } from "@/lib/scroll";
+import { useBackToClose } from "@/lib/backStack";
 import { bigEmojiCount } from "@/lib/chatText";
 import { parseYouTubeId } from "@/lib/youtubeUrl";
 import { SendLaterSheet } from "./SendLaterSheet";
@@ -109,6 +110,9 @@ export function ChatPanel(props: Props) {
   const [more, setMore] = useState(false);
   const [recording, setRecording] = useState(false);
   const [laterOpen, setLaterOpen] = useState(false);
+  useBackToClose(!!pickerFor, () => setPickerFor(null));
+  useBackToClose(laterOpen, () => setLaterOpen(false));
+  useBackToClose(more, () => setMore(false));
   const sendHold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heldSend = useRef(false);
   const openLater = () => {
@@ -137,6 +141,30 @@ export function ChatPanel(props: Props) {
     if (stickRef.current) el.scrollTop = el.scrollHeight;
     else if (added > 0) setUnseenBelow((n) => n + added);
   }, [messages.length, partnerTyping, props.scheduled?.length]);
+
+  // Stay at the bottom when the chat area changes size (banners appearing, the keyboard,
+  // photos / song cards loading) — otherwise the newest messages end up hidden.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const stick = () => {
+      if (stickRef.current) el.scrollTop = el.scrollHeight;
+    };
+    const ro = new ResizeObserver(stick);
+    ro.observe(el);
+    for (const child of Array.from(el.children)) ro.observe(child);
+    const mo = new MutationObserver((changes) => {
+      for (const c of changes) for (const n of Array.from(c.addedNodes)) if (n instanceof Element) ro.observe(n);
+      stick();
+    });
+    mo.observe(el, { childList: true });
+    el.addEventListener("load", stick, true); // images inside the list
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      el.removeEventListener("load", stick, true);
+    };
+  }, []);
 
   // Opening a room with unread messages → start at the first one (if they don't all fit).
   const openedAtUnread = useRef(false);

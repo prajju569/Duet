@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBackToClose } from "@/lib/backStack";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
 import { usePlaybackSync } from "@/hooks/usePlaybackSync";
@@ -185,6 +186,9 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
   const [pinnedMsg, setPinnedMsg] = useState<Message | null>(null);
   const [prefill, setPrefill] = useState<{ text: string; n: number } | null>(null);
   const [qHidden, setQHidden] = useState(true);
+  // Short phones (e.g. 360×640): keep the chat area free — at most one banner at a time.
+  const [smallScreen, setSmallScreen] = useState(false);
+  useEffect(() => setSmallScreen(window.innerHeight < 720), []);
   const [favourites, setFavourites] = useState<Favourite[]>(initial.favourites);
   const [presence, setPresence] = useState<Record<string, PresenceInfo>>({});
   const [partnerTyping, setPartnerTyping] = useState<boolean | "recording">(false);
@@ -1342,12 +1346,21 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
     [shown],
   );
 
+  // Android back closes whatever is open on top instead of leaving the room.
+  useBackToClose(!!sheet, () => setSheet(null));
+  useBackToClose(searchOpen, () => setSearchOpen(false));
+  useBackToClose(!!dedicating, () => setDedicating(null));
+  useBackToClose(renameOpen, () => setRenameOpen(false));
+  useBackToClose(inviteOpen && !partner, () => setInviteOpen(false));
+  useBackToClose(pinSheet, () => setPinSheet(false));
+
   // Slim bar at the top of the chat: countdown, or "invite to listen".
   const partnerListening = !!(partner && presence[partner.userId]?.listening && presence[partner.userId]?.active !== false);
   const days = countdown ? daysUntil(countdown.date) : null;
   const showInvite = !!(features.v4 && partner && player.listening && !partnerListening);
   const showCountdown = !!(countdown && days !== null && days >= 0);
   const busyBanners = Number(showInvite) + Number(showCountdown) + Number(!!pinnedMsg);
+  const pushCardShowing = !!(partner && !pushPromptHidden && (push.status === "off" || push.status === "needs-install") && player.unlocked && messages.length > 0);
   const banner = (
     <>
       {pinnedMsg && !pinnedMsg.deleted_at && (
@@ -1355,7 +1368,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           <button onClick={() => void jumpToMessage(pinnedMsg)} className="min-w-0 truncate text-left text-cream/85" aria-label="Go to pinned message">
             📌 <b className="font-semibold">{pinnedMsg.user_id === me.id ? "You" : nameOf(pinnedMsg.user_id)}:</b> {pinnedMsg.body}
           </button>
-          <button onClick={() => void pinMessage(null)} aria-label="Unpin" className="shrink-0 rounded-full px-1.5 text-cream/45">
+          <button onClick={() => void pinMessage(null)} aria-label="Unpin" className="-my-1.5 flex size-9 shrink-0 items-center justify-center rounded-full text-cream/45">
             ✕
           </button>
         </div>
@@ -1376,7 +1389,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           🎧 {firstName(partner.name)} isn&apos;t listening · <b>Invite</b>
         </button>
       )}
-      {partner && !qHidden && busyBanners < 2 && (
+      {partner && !qHidden && busyBanners < (smallScreen ? 1 : 2) && !(smallScreen && pushCardShowing) && (
         <div className="flex max-w-full min-w-0 items-center gap-1 rounded-full bg-violet-300/12 py-1 pr-1 pl-3 text-[12.5px] text-violet-100 ring-1 ring-violet-200/15 backdrop-blur">
           <button
             onClick={() => {
@@ -1388,7 +1401,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
           >
             💬 <b className="font-semibold">Today:</b> {qotd.text}
           </button>
-          <button onClick={hideQuestion} aria-label="Hide today's question" className="shrink-0 rounded-full px-1.5 text-violet-100/50">
+          <button onClick={hideQuestion} aria-label="Hide today's question" className="-my-1.5 flex size-9 shrink-0 items-center justify-center rounded-full text-violet-100/50">
             ✕
           </button>
         </div>
@@ -1525,7 +1538,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
                 <button onClick={togglePush} className="shrink-0 rounded-full bg-cream px-3 py-1.5 text-sm font-semibold text-ink">
                   {push.status === "needs-install" ? "How?" : "Turn on"}
                 </button>
-                <button onClick={hidePushPrompt} aria-label="Not now" className="shrink-0 p-1 text-cream/50">
+                <button onClick={hidePushPrompt} aria-label="Not now" className="-m-1 flex size-10 shrink-0 items-center justify-center rounded-full text-cream/50">
                   ✕
                 </button>
               </div>
@@ -1540,7 +1553,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
                 <button onClick={() => setPinSheet(true)} className="shrink-0 rounded-full bg-cream px-3 py-1.5 text-sm font-semibold text-ink">
                   Set PIN
                 </button>
-                <button onClick={() => setPinNudgeDismissed(true)} aria-label="Later" className="shrink-0 p-1 text-cream/50">
+                <button onClick={() => setPinNudgeDismissed(true)} aria-label="Later" className="-m-1 flex size-10 shrink-0 items-center justify-center rounded-full text-cream/50">
                   ✕
                 </button>
               </div>

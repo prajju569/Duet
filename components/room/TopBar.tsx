@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useBackToClose } from "@/lib/backStack";
 import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { BackIcon, HeadphonesIcon, LinkIcon } from "@/components/ui/Icons";
@@ -67,6 +68,7 @@ function Person({ userId, name, presence, isMe, lastSeen }: { userId: string; na
 export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onMissYou, onTheme, onSchedule, togetherText, push, lastSeen, muted, onMute, onSearch, onCountdown }: Props) {
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
+  useBackToClose(menu, () => setMenu(false));
 
   async function copyCode() {
     try {
@@ -77,8 +79,8 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
   }
 
   return (
-    <header className="flex items-center gap-3 px-4 pt-[max(env(safe-area-inset-top),10px)] pb-2.5">
-      <Link href="/" aria-label="All rooms" className="-ml-1.5 rounded-full p-1.5 text-cream/60 hover:bg-white/5 hover:text-cream">
+    <header className="flex items-center gap-2 px-4 pt-[max(env(safe-area-inset-top),10px)] pb-2.5">
+      <Link href="/" aria-label="All rooms" className="-ml-2.5 rounded-full p-2.5 text-cream/60 hover:bg-white/5 hover:text-cream">
         <BackIcon size={18} />
       </Link>
       <div className="flex min-w-0 flex-1 items-center gap-4">
@@ -99,7 +101,7 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
           onClick={onMissYou}
           aria-label={`Tell ${firstName(partner.name)} you miss them`}
           title="Missing you"
-          className="flex size-8 items-center justify-center rounded-full text-base ring-1 ring-white/10 transition hover:bg-white/10 active:scale-90"
+          className="flex size-10 items-center justify-center rounded-full text-lg ring-1 ring-white/10 transition hover:bg-white/10 active:scale-90"
         >
           🥹
         </button>
@@ -109,7 +111,7 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
           onClick={onNudge}
           aria-label={`Tell ${firstName(partner.name)} you're thinking of them`}
           title="Thinking of you"
-          className="flex size-8 items-center justify-center rounded-full text-base ring-1 ring-white/10 transition hover:bg-white/10 active:scale-90"
+          className="flex size-10 items-center justify-center rounded-full text-lg ring-1 ring-white/10 transition hover:bg-white/10 active:scale-90"
         >
           💭
         </button>
@@ -127,7 +129,7 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
         <button
           onClick={() => setMenu((m) => !m)}
           aria-label="Room options"
-          className="flex size-8 items-center justify-center rounded-full text-cream/70 ring-1 ring-white/10 hover:bg-white/10"
+          className="flex size-10 items-center justify-center rounded-full text-cream/70 ring-1 ring-white/10 hover:bg-white/10"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
             <circle cx="5" cy="12" r="2" />

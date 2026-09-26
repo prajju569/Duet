@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useBackToClose } from "@/lib/backStack";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { updateAppBadge } from "@/lib/badge";
@@ -81,6 +82,8 @@ export function RoomsList({ rooms: initial, meId }: { rooms: HomeRoom[]; meId: s
   const [renaming, setRenaming] = useState<HomeRoom | null>(null);
   const [menuFor, setMenuFor] = useState<HomeRoom | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  useBackToClose(!!menuFor, () => setMenuFor(null));
+  useBackToClose(!!renaming, () => setRenaming(null));
   const hasPrefs = initial.some((r) => r.pinned !== undefined);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   useEffect(() => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useBackToClose } from "@/lib/backStack";
 import type { usePlaybackSync } from "@/hooks/usePlaybackSync";
 import type { Favourite, QueueItem, Track } from "@/lib/types";
 import { possessive } from "@/lib/format";
@@ -83,6 +84,14 @@ export function PlayerPanel(props: Props) {
     ? { videoId: s.videoId, title: s.title ?? "", channel: s.channel, thumbnail: s.thumbnail, durationSec: s.durationSec }
     : null;
   const saved = !!current && props.ourSongs.some((o) => o.video_id === current.videoId);
+
+  // Android back: closes the lists sheet first, then the full-screen player.
+  useBackToClose(open && !isDesktop, () => {
+    setSheet(false);
+    setOpen(false);
+    setPull(0);
+  });
+  useBackToClose(sheet && open && !isDesktop, () => setSheet(false));
 
   const close = () => {
     setSheet(false);
@@ -348,10 +357,10 @@ export function PlayerPanel(props: Props) {
         {/* Collapsed controls */}
         <div className={expanded ? "hidden" : "flex items-center gap-0.5"}>
           {playPause(40)}
-          <button onClick={player.skip} disabled={!s?.videoId} className="rounded-full p-2 text-cream/75 active:scale-90 disabled:opacity-30" aria-label="Skip">
+          <button onClick={player.skip} disabled={!s?.videoId} className="rounded-full p-2.5 text-cream/75 active:scale-90 disabled:opacity-30" aria-label="Skip">
             <SkipIcon size={20} />
           </button>
-          <button onClick={() => setOpen(true)} className="rounded-full p-1.5 text-cream/60" aria-label="Open player">
+          <button onClick={() => setOpen(true)} className="rounded-full p-2.5 text-cream/60" aria-label="Open player">
             <ChevronUp size={20} />
           </button>
         </div>
