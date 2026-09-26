@@ -61,7 +61,9 @@ export function VoiceMessage({ m, mine }: { m: Message; mine: boolean }) {
   const audio = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(0);
+  const [rate, setRate] = useState(1);
   const total = m.meta?.seconds ?? 0;
+  const peaks = m.meta?.peaks;
 
   useEffect(() => () => audio.current?.pause(), []);
 
@@ -78,6 +80,7 @@ export function VoiceMessage({ m, mine }: { m: Message; mine: boolean }) {
       audio.current = a;
     }
     const a = audio.current;
+    a.playbackRate = rate;
     if (a.paused) {
       window.dispatchEvent(new CustomEvent("duet:duck", { detail: true })); // soften the music
       void a.play();
@@ -103,11 +106,38 @@ export function VoiceMessage({ m, mine }: { m: Message; mine: boolean }) {
         {playing ? "❚❚" : "▶"}
       </button>
       <span className="min-w-0 flex-1">
-        <span className={`block h-1.5 overflow-hidden rounded-full ${mine ? "bg-ink/15" : "bg-white/15"}`}>
-          <span className={`block h-full rounded-full ${mine ? "bg-ink/60" : "bg-cream/80"}`} style={{ width: `${pct}%` }} />
-        </span>
-        <span className={`mt-1 block text-[11px] ${mine ? "text-ink/60" : "text-cream/55"}`}>
-          🎤 {formatTime(playing || pos ? pos : total)}
+        {peaks?.length ? (
+          <span className="flex h-7 items-center gap-[2px]" aria-hidden>
+            {peaks.map((h, i) => (
+              <span
+                key={i}
+                className={`w-[3px] flex-1 rounded-full ${
+                  (i + 0.5) / peaks.length <= pct / 100 ? (mine ? "bg-ink/70" : "bg-cream/90") : mine ? "bg-ink/25" : "bg-white/25"
+                }`}
+                style={{ height: `${h}%` }}
+              />
+            ))}
+          </span>
+        ) : (
+          <span className={`block h-1.5 overflow-hidden rounded-full ${mine ? "bg-ink/15" : "bg-white/15"}`}>
+            <span className={`block h-full rounded-full ${mine ? "bg-ink/60" : "bg-cream/80"}`} style={{ width: `${pct}%` }} />
+          </span>
+        )}
+        <span className={`mt-1 flex items-center justify-between text-[11px] ${mine ? "text-ink/60" : "text-cream/55"}`}>
+          <span>🎤 {formatTime(playing || pos ? pos : total)}</span>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => {
+              const next = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
+              setRate(next);
+              if (audio.current) audio.current.playbackRate = next;
+            }}
+            aria-label={`Playback speed ${rate}×`}
+            className={`rounded-full px-1.5 py-px text-[10.5px] font-bold ${mine ? "bg-ink/15" : "bg-white/15"}`}
+          >
+            {rate}×
+          </button>
         </span>
       </span>
     </span>

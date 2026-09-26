@@ -3,7 +3,7 @@ import webpush from "web-push";
 import { appendFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PushPayload = { title: string; body: string; url: string; tag: string };
+export type PushPayload = { title: string; body: string; url: string; tag: string; badge?: number };
 
 export function pushConfigured() {
   return !!(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);

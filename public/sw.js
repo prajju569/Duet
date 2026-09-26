@@ -13,6 +13,12 @@ self.addEventListener("push", (event) => {
   const url = data.url || "/";
   event.waitUntil(
     (async () => {
+      // App-icon badge: total unread across rooms.
+      if (typeof data.badge === "number" && self.navigator.setAppBadge) {
+        try {
+          await (data.badge > 0 ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge());
+        } catch {}
+      }
       // Already looking at this room? Then stay quiet.
       const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       const watching = wins.some((c) => c.visibilityState === "visible" && new URL(c.url).pathname === url);

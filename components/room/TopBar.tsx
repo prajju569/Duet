@@ -23,18 +23,37 @@ type Props = {
   onTheme?: () => void;
   onSchedule?: () => void;
   togetherText?: string | null;
+  /** v4: partner's last time in the room (ms) */
+  lastSeen?: number | null;
+  muted?: boolean;
+  onMute?: () => void;
+  onSearch?: () => void;
+  onCountdown?: () => void;
   push?: { status: string; toggle: () => void } | null;
 };
 
-function Person({ userId, name, presence, isMe }: { userId: string; name: string; presence?: PresenceInfo; isMe?: boolean }) {
+/** "last seen today at 7:40 pm" — WhatsApp style. */
+export function lastSeenText(ms: number, now = Date.now()) {
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (now - ms < 60_000) return "last seen just now";
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((day(new Date(now)) - day(d)) / 86_400_000);
+  if (days === 0) return `last seen today at ${time}`;
+  if (days === 1) return `last seen yesterday at ${time}`;
+  if (days < 7) return `last seen ${d.toLocaleDateString([], { weekday: "long" })} at ${time}`;
+  return `last seen ${d.toLocaleDateString([], { day: "numeric", month: "short" })}`;
+}
+
+function Person({ userId, name, presence, isMe, lastSeen }: { userId: string; name: string; presence?: PresenceInfo; isMe?: boolean; lastSeen?: number | null }) {
   const online = !!presence;
-  const status = presence?.listening ? "listening now" : online ? "online" : "offline";
+  const status = presence?.listening ? "listening now" : online ? "online" : lastSeen ? lastSeenText(lastSeen) : "offline";
   return (
     <div className="flex min-w-0 items-center gap-2">
       <Avatar userId={userId} name={name} size={30} online={online} />
       <div className="min-w-0 leading-tight">
         <div className="truncate text-[13px] font-medium">{isMe ? "You" : firstName(name)}</div>
-        <div className={`flex items-center gap-1 text-[11px] ${presence?.listening ? "text-rose-200" : "text-cream/50"}`}>
+        <div className={`flex items-center gap-1 overflow-hidden text-[11px] whitespace-nowrap ${presence?.listening ? "text-rose-200" : "text-cream/50"}`}>
           {presence?.listening && <HeadphonesIcon size={11} className="animate-pulse" />}
           {status}
         </div>
@@ -43,7 +62,7 @@ function Person({ userId, name, presence, isMe }: { userId: string; name: string
   );
 }
 
-export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onMissYou, onTheme, onSchedule, togetherText, push }: Props) {
+export function TopBar({ roomName, code, me, partner, presence, onInvite, onRename, onNudge, onMissYou, onTheme, onSchedule, togetherText, push, lastSeen, muted, onMute, onSearch, onCountdown }: Props) {
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
 
@@ -62,7 +81,7 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
       </Link>
       <div className="flex min-w-0 flex-1 items-center gap-4">
         {partner ? (
-          <Person userId={partner.userId} name={partner.name} presence={presence[partner.userId]} />
+          <Person userId={partner.userId} name={partner.name} presence={presence[partner.userId]} lastSeen={lastSeen} />
         ) : (
           <div className="min-w-0 leading-tight">
             <div className="truncate font-display text-[15px] italic">{roomName}</div>
@@ -165,6 +184,39 @@ export function TopBar({ roomName, code, me, partner, presence, onInvite, onRena
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
                 >
                   ⏰ <span>Schedule a song</span>
+                </button>
+              )}
+              {onCountdown && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    onCountdown();
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                >
+                  ⏳ <span>Countdown</span>
+                </button>
+              )}
+              {onSearch && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    onSearch();
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                >
+                  🔍 <span>Search chat</span>
+                </button>
+              )}
+              {onMute && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    onMute();
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                >
+                  {muted ? "🔔" : "🔕"} <span>{muted ? "Unmute this room" : "Mute this room"}</span>
                 </button>
               )}
               {push && (

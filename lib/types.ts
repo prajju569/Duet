@@ -24,13 +24,16 @@ export type Member = {
   userId: string;
   name: string;
   lastReadAt: string;
+  /** v4: when they last had the room open */
+  lastSeenAt?: string | null;
+  muted?: boolean;
 };
 
 export type Message = {
   id: string;
   room_id: string;
   user_id: string | null;
-  kind: "text" | "system" | "sticker" | "image" | "voice" | "moment" | "dedication";
+  kind: "text" | "system" | "sticker" | "image" | "voice" | "moment" | "dedication" | "poll";
   body: string;
   created_at: string;
   reply_to?: string | null;
@@ -88,6 +91,8 @@ export type MessageMeta = {
   sticker?: string;
   /** 🥹 "missing you" ping */
   miss?: boolean;
+  /** poll: the choices (the question is the message body) */
+  options?: string[];
   // moment + dedication: the song
   videoId?: string;
   title?: string;
@@ -101,5 +106,10 @@ export type MessageMeta = {
   width?: number;
   height?: number;
   seconds?: number;
+  /** voice note: loudness bars (0–100) for the waveform */
+  peaks?: number[];
   mime?: string;
 };
+
+export type PollVote = { message_id: string; room_id: string; user_id: string; choice: number };
+export type Countdown = { label: string; date: string };

@@ -1,8 +1,11 @@
 "use client";
 
 import { centerIn } from "@/lib/scroll";
+import { bigEmojiCount } from "@/lib/chatText";
+import { parseYouTubeId } from "@/lib/youtubeUrl";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Member, Message, Reaction } from "@/lib/types";
+import { createPortal } from "react-dom";
+import type { Member, Message, PollVote, Reaction, Track } from "@/lib/types";
 import { clockTime, dayLabel, firstName } from "@/lib/format";
 import { parseTimestamp } from "@/lib/sync";
 import { BURST_EMOJIS } from "./EmojiBurst";
@@ -24,16 +27,34 @@ const SWIPE_MAX = 84;
 
 type Props = {
   topBar: React.ReactNode;
+  /** Scroll to this message (from chat search). `n` changes on every request. */
+  jumpRequest?: { id: string; n: number } | null;
+  /** For drafts (kept per room on this phone). */
+  roomId?: string;
+  /** My "read up to" when the room opened → "N unread messages" divider. */
+  unreadSince?: string | null;
+  onRetry?: (m: Message) => void;
+  onPlayTrack?: (t: Track, by: string | null) => void;
+  /** v4: polls */
+  onPoll?: () => void;
+  votes?: PollVote[];
+  onVote?: (messageId: string, choice: number) => void;
+  /** Slim bar pinned to the top of the chat (countdown, listen invite). */
+  banner?: React.ReactNode;
+  /** Put this text in the message box (e.g. today's question). */
+  prefill?: { text: string; n: number } | null;
+  onPin?: (messageId: string) => void;
+  pinnedId?: string | null;
   meId: string;
   partner: Member | null;
   messages: Message[];
   reactions: Record<string, Reaction>;
   hasOlder: boolean;
   onLoadOlder: () => void;
-  partnerTyping: boolean;
+  partnerTyping: boolean | "recording";
   nameOf: (userId: string | null | undefined) => string;
   onSend: (body: string, replyTo: string | null) => void;
-  onTyping: (typing: boolean) => void;
+  onTyping: (typing: boolean, recording?: boolean) => void;
   onReact: (messageId: string, emoji: string) => void;
   onSeen: () => void;
   /** Optional card shown just above the message box. */
@@ -47,7 +68,7 @@ type Props = {
   onSticker?: (emoji: string) => void;
   onPlayFromMessage?: (m: Message) => void;
   onPhoto?: (file: File) => void;
-  onVoice?: (blob: Blob, seconds: number, mime: string) => void;
+  onVoice?: (blob: Blob, seconds: number, mime: string, peaks?: number[]) => void;
   onError?: (msg: string) => void;
 };
 
@@ -58,6 +79,25 @@ export function ChatPanel(props: Props) {
   const stickRef = useRef(true);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [text, setText] = useState("");
+  // Drafts: what you were typing stays here if you leave the room (this phone only).
+  const draftKey = props.roomId ? `duet:draft:${props.roomId}` : null;
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const d = localStorage.getItem(draftKey);
+      if (d) setText(d);
+    } catch {}
+  }, [draftKey]);
+  useEffect(() => {
+    if (!draftKey) return;
+    const t = setTimeout(() => {
+      try {
+        if (text.trim()) localStorage.setItem(draftKey, text);
+        else localStorage.removeItem(draftKey);
+      } catch {}
+    }, 300);
+    return () => clearTimeout(t);
+  }, [text, draftKey]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [stickers, setStickers] = useState(false);
@@ -85,6 +125,22 @@ export function ChatPanel(props: Props) {
     else if (added > 0) setUnseenBelow((n) => n + added);
   }, [messages.length, partnerTyping]);
 
+  // Opening a room with unread messages → start at the first one (if they don't all fit).
+  const openedAtUnread = useRef(false);
+  useLayoutEffect(() => {
+    if (openedAtUnread.current) return;
+    openedAtUnread.current = true;
+    const el = scrollRef.current;
+    const divider = el?.querySelector<HTMLElement>("#unread-divider");
+    if (!el || !divider) return;
+    const top = divider.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12;
+    if (el.scrollHeight - top > el.clientHeight) {
+      stickRef.current = false;
+      el.scrollTop = top;
+      setAtBottom(false);
+    }
+  }, []);
+
   // Seen ticks: mark read whenever a new message from them is on screen.
   useEffect(() => {
     if (lastPartnerMsg) onSeen();
@@ -104,6 +160,33 @@ export function ChatPanel(props: Props) {
     setUnseenBelow(0);
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }
+
+  // The message whose menu is open got unsent by them → close the menu.
+  const pickedGone = !!pickerFor && !!messages.find((m) => m.id === pickerFor)?.deleted_at;
+  useEffect(() => {
+    if (pickedGone) setPickerFor(null);
+  }, [pickedGone]);
+
+  useEffect(() => {
+    if (!props.prefill) return;
+    setText(props.prefill.text);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      el?.focus();
+      el?.setSelectionRange(el.value.length, el.value.length);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.prefill]);
+
+  // Search result picked → scroll there once it's rendered.
+  useEffect(() => {
+    if (!props.jumpRequest) return;
+    stickRef.current = false;
+    const id = props.jumpRequest.id;
+    const t = setTimeout(() => jumpTo(id), 60);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.jumpRequest]);
 
   function jumpTo(id: string) {
     const target = document.getElementById(`msg-${id}`);
@@ -145,6 +228,11 @@ export function ChatPanel(props: Props) {
     setUnseenBelow(0);
   }
 
+  // "N unread messages" divider, WhatsApp-style (fixed at what was unread when you opened the room).
+  const since = props.unreadSince ? parseTimestamp(props.unreadSince) : null;
+  const firstUnread = since == null ? -1 : messages.findIndex((m) => m.user_id !== meId && m.kind !== "system" && parseTimestamp(m.created_at) > since);
+  const unreadCount = firstUnread < 0 ? 0 : messages.slice(firstUnread).filter((m) => m.user_id !== meId && m.kind !== "system").length;
+
   // Group reactions by message.
   const byMessage: Record<string, Reaction[]> = {};
   for (const r of Object.values(reactions)) {
@@ -155,6 +243,7 @@ export function ChatPanel(props: Props) {
   return (
     <main className="relative flex min-h-0 flex-1 flex-col">
       {props.topBar}
+      {props.banner && <div className="flex flex-wrap justify-center gap-1.5 px-3 pt-1 pb-1 empty:hidden">{props.banner}</div>}
       <div
         ref={scrollRef}
         onScroll={(e) => {
@@ -212,6 +301,13 @@ export function ChatPanel(props: Props) {
           return (
             <Fragment key={m.id}>
               {dayHeader}
+              {i === firstUnread && (
+                <div id="unread-divider" className="my-3 flex justify-center">
+                  <span className="rounded-full bg-rose-300/15 px-3 py-1 text-[11.5px] font-semibold text-rose-100 ring-1 ring-rose-200/20">
+                    {unreadCount} unread message{unreadCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+              )}
               <Bubble
                 message={m}
                 mine={mine}
@@ -227,7 +323,19 @@ export function ChatPanel(props: Props) {
                 myReaction={reactions[`${m.id}:${meId}`]?.emoji ?? null}
                 pickerOpen={pickerFor === m.id}
                 onOpenPicker={() => setPickerFor(m.id)}
+                onClosePicker={() => setPickerFor(null)}
                 onReply={() => startReply(m)}
+                onCopy={
+                  m.kind === "text" && !m.deleted_at
+                    ? () => {
+                        setPickerFor(null);
+                        navigator.clipboard?.writeText(m.body).then(
+                          () => props.onError?.("📋 Copied"),
+                          () => props.onError?.("Couldn't copy"),
+                        );
+                      }
+                    : undefined
+                }
                 onEdit={props.v2 && mine && canEditMsg(m) ? () => startEdit(m) : undefined}
                 onUnsend={
                   props.v2 && mine && !m.deleted_at && !m.pending
@@ -238,6 +346,22 @@ export function ChatPanel(props: Props) {
                     : undefined
                 }
                 onPlay={props.onPlayFromMessage ? () => props.onPlayFromMessage!(m) : undefined}
+                onPlayTrack={props.onPlayTrack ? (t) => props.onPlayTrack!(t, m.user_id) : undefined}
+                onRetry={m.failed && props.onRetry ? () => props.onRetry!(m) : undefined}
+                onPin={
+                  props.onPin && !m.deleted_at && !m.pending
+                    ? () => {
+                        setPickerFor(null);
+                        props.onPin!(m.id);
+                      }
+                    : undefined
+                }
+                pinned={props.pinnedId === m.id}
+                poll={
+                  m.kind === "poll"
+                    ? { votes: (props.votes ?? []).filter((v) => v.message_id === m.id), meId, nameOf: props.nameOf, onVote: props.onVote ? (c) => props.onVote!(m.id, c) : undefined }
+                    : undefined
+                }
                 onReact={(emoji) => {
                   props.onReact(m.id, emoji);
                   setPickerFor(null);
@@ -254,7 +378,7 @@ export function ChatPanel(props: Props) {
               <span className="typing-dot [animation-delay:150ms]" />
               <span className="typing-dot [animation-delay:300ms]" />
             </span>
-            {firstName(partner.name)} is typing…
+            {firstName(partner.name)} is {partnerTyping === "recording" ? "recording a voice note 🎙️" : "typing…"}
           </div>
         )}
       </div>
@@ -329,11 +453,16 @@ export function ChatPanel(props: Props) {
         )}
         {recording ? (
           <VoiceRecorder
-            onCancel={() => setRecording(false)}
-            onError={(msg) => props.onError?.(msg)}
-            onDone={(blob, secs, mime) => {
+            onCancel={() => {
               setRecording(false);
-              props.onVoice?.(blob, secs, mime);
+              props.onTyping(false);
+            }}
+            onError={(msg) => props.onError?.(msg)}
+            onTick={() => props.onTyping(true, true)}
+            onDone={(blob, secs, mime, peaks) => {
+              setRecording(false);
+              props.onTyping(false);
+              props.onVoice?.(blob, secs, mime, peaks);
             }}
           />
         ) : (
@@ -367,6 +496,19 @@ export function ChatPanel(props: Props) {
                     >
                       📷 <span>Photo</span>
                     </button>
+                    {props.onPoll && (
+                      <button
+                        type="button"
+                        aria-label="Poll"
+                        onClick={() => {
+                          setMore(false);
+                          props.onPoll!();
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/8"
+                      >
+                        📊 <span>Poll</span>
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -459,12 +601,21 @@ type BubbleProps = {
   myReaction: string | null;
   pickerOpen: boolean;
   onOpenPicker: () => void;
+  onClosePicker: () => void;
   onReply: () => void;
   onReact: (emoji: string) => void;
+  onCopy?: () => void;
   onEdit?: () => void;
   onUnsend?: () => void;
   onPlay?: () => void;
+  onPlayTrack?: (t: Track) => void;
+  onRetry?: () => void;
+  poll?: PollInfo;
+  onPin?: () => void;
+  pinned?: boolean;
 };
+
+type PollInfo = { votes: PollVote[]; meId: string; nameOf: (id: string | null | undefined) => string; onVote?: (choice: number) => void };
 
 function Bubble({
   message: m,
@@ -481,11 +632,18 @@ function Bubble({
   myReaction,
   pickerOpen,
   onOpenPicker,
+  onClosePicker,
   onReply,
   onReact,
+  onCopy,
   onEdit,
   onUnsend,
   onPlay,
+  onPlayTrack,
+  onRetry,
+  poll,
+  onPin,
+  pinned,
 }: BubbleProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -494,6 +652,9 @@ function Bubble({
   const lastTap = useRef(0);
   const [pressing, setPressing] = useState(false);
   const [dx, setDx] = useState(0);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  // Stickers and emoji-only messages sit on the background, no bubble.
+  const bare = !m.deleted_at && (m.kind === "sticker" || (m.kind === "text" && !m.reply_to && bigEmojiCount(m.body) > 0));
 
   const clearTimer = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -587,35 +748,23 @@ function Bubble({
           <ReplyIcon size={16} />
         </div>
         {pickerOpen && (
-          <div
-            className={`animate-pop absolute -top-12 z-20 flex items-center gap-0.5 rounded-full bg-zinc-900/95 p-1 shadow-xl ring-1 ring-white/10 backdrop-blur ${mine ? "right-0" : "left-0"}`}
-          >
-            {EMOJIS.map((e) => (
-              <button
-                key={e}
-                onClick={() => onReact(e)}
-                className={`flex size-9 items-center justify-center rounded-full text-xl transition hover:scale-125 active:scale-95 ${myReaction === e ? "bg-white/15" : ""}`}
-              >
-                {e}
-              </button>
-            ))}
-            <span className="mx-0.5 h-6 w-px bg-white/15" />
-            <button onClick={onReply} aria-label="Reply" className="flex size-9 items-center justify-center rounded-full text-cream/80 hover:bg-white/10">
-              <ReplyIcon size={17} />
-            </button>
-            {onEdit && (
-              <button onClick={onEdit} aria-label="Edit" className="flex size-9 items-center justify-center rounded-full text-base hover:bg-white/10">
-                ✏️
-              </button>
-            )}
-            {onUnsend && (
-              <button onClick={onUnsend} aria-label="Unsend" className="flex size-9 items-center justify-center rounded-full text-base hover:bg-white/10">
-                🗑️
-              </button>
-            )}
-          </div>
+          <MessageMenu
+            anchor={bubbleRef.current}
+            mine={mine}
+            myReaction={myReaction}
+            onReact={onReact}
+            onClose={onClosePicker}
+            actions={[
+              { label: "Reply", icon: <ReplyIcon size={15} />, run: onReply },
+              ...(onCopy ? [{ label: "Copy", icon: "📋", run: onCopy }] : []),
+              ...(onPin ? [{ label: pinned ? "Unpin" : "Pin", icon: "📌", run: onPin }] : []),
+              ...(onEdit ? [{ label: "Edit", icon: "✏️", run: onEdit }] : []),
+              ...(onUnsend ? [{ label: "Unsend", icon: "🗑️", run: onUnsend, danger: true }] : []),
+            ]}
+          />
         )}
         <div
+          ref={bubbleRef}
           {...handlers}
           onClickCapture={(e) => {
             if (suppressClick.current) {
@@ -628,7 +777,7 @@ function Bubble({
           className={`relative text-[15px] leading-snug break-words whitespace-pre-wrap transition-[transform,box-shadow] duration-200 select-none ${
             pressing ? "scale-[0.97]" : ""
           } ${flash ? "ring-2 ring-rose-300" : ""} ${
-            m.kind === "sticker" && !m.deleted_at
+            bare
               ? "rounded-3xl px-1 py-0.5"
               : `px-3.5 py-2 ${mine
               ? `bg-gradient-to-br from-rose-300 to-orange-200 text-ink ${tail ? "rounded-3xl rounded-br-md" : "rounded-3xl"}`
@@ -648,10 +797,10 @@ function Bubble({
               <span className={`line-clamp-2 text-[13px] ${mine ? "text-ink/70" : "text-cream/65"}`}>{quote.message ? quote.message.body : "Earlier message"}</span>
             </button>
           )}
-          <MessageBody m={m} mine={mine} authorName={authorName} onPlay={onPlay} />
+          <MessageBody m={m} mine={mine} authorName={authorName} onPlay={onPlay} onPlayTrack={onPlayTrack} poll={poll} />
           <span
             className={`ml-2 inline-flex translate-y-[3px] items-center gap-0.5 align-baseline text-[10px] ${
-              mine && !(m.kind === "sticker" && !m.deleted_at) ? "text-ink/55" : "text-cream/40"
+              mine && !bare ? "text-ink/55" : "text-cream/40"
             }`}
           >
             {clockTime(m.created_at)}
@@ -681,6 +830,11 @@ function Bubble({
           </button>
         )}
       </div>
+      {onRetry && (
+        <button onClick={onRetry} className="mt-1 rounded-full px-2 py-0.5 text-[12px] font-medium text-rose-300 active:bg-white/10">
+          ⚠️ Not sent · Tap to retry
+        </button>
+      )}
     </div>
   );
 }
@@ -736,12 +890,27 @@ function BurstButton({ onBurst }: { onBurst: (emoji: string) => void }) {
 }
 
 /** What's inside a bubble, by message kind. */
-function MessageBody({ m, mine, authorName, onPlay }: { m: Message; mine: boolean; authorName: string; onPlay?: () => void }) {
+function MessageBody({
+  m,
+  mine,
+  authorName,
+  onPlay,
+  onPlayTrack,
+  poll,
+}: {
+  m: Message;
+  mine: boolean;
+  authorName: string;
+  onPlay?: () => void;
+  onPlayTrack?: (t: Track) => void;
+  poll?: PollInfo;
+}) {
   if (m.deleted_at) return <span className="italic opacity-60">🚫 Message deleted</span>;
   const meta = m.meta ?? {};
   const stop = (e: React.PointerEvent) => e.stopPropagation();
 
   if (m.kind === "image") return <ImageMessage m={m} />;
+  if (m.kind === "poll" && meta.options && poll) return <PollCard question={m.body} options={meta.options} mine={mine} poll={poll} />;
   if (m.kind === "voice") return <VoiceMessage m={m} mine={mine} />;
 
   if (m.kind === "sticker" && meta.miss) {
@@ -795,10 +964,209 @@ function MessageBody({ m, mine, authorName, onPlay }: { m: Message; mine: boolea
     );
   }
 
+  const big = m.kind === "text" && !m.reply_to ? bigEmojiCount(m.body) : 0;
+  if (big) return <span className={`inline-block leading-none drop-shadow-lg ${big === 1 ? "text-6xl" : big === 2 ? "text-5xl" : "text-4xl"}`}>{m.body.trim()}</span>;
+
+  const ytId = m.kind === "text" ? parseYouTubeId(m.body) : null;
   return (
     <>
       {m.body}
       {m.edited_at && <span className={`ml-1.5 text-[10px] ${mine ? "text-ink/50" : "text-cream/40"}`}>edited</span>}
+      {ytId && onPlayTrack && <LinkCard videoId={ytId} mine={mine} onPlay={onPlayTrack} />}
     </>
+  );
+}
+
+type MenuItem = { label: string; icon: React.ReactNode; run: () => void; danger?: boolean };
+
+/**
+ * Long-press menu, WhatsApp-style: the chat dims, the message stays lit, reactions float
+ * above it and actions below — always kept inside the screen.
+ */
+function MessageMenu({
+  anchor,
+  mine,
+  myReaction,
+  onReact,
+  onClose,
+  actions,
+}: {
+  anchor: HTMLElement | null;
+  mine: boolean;
+  myReaction: string | null;
+  onReact: (e: string) => void;
+  onClose: () => void;
+  actions: MenuItem[];
+}) {
+  const [pos, setPos] = useState<{ emojiTop: number; actTop: number; x: number; rect: DOMRect; html: string } | null>(null);
+  // Esc closes it (computers).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useLayoutEffect(() => {
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const vw = window.innerWidth;
+    const EMOJI = 48, GAP = 8, ACT = actions.length * 44 + 10;
+    let emojiTop = r.top - EMOJI - GAP;
+    let actTop = r.bottom + GAP;
+    if (emojiTop < GAP) {
+      emojiTop = r.bottom + GAP;
+      actTop = emojiTop + EMOJI + GAP;
+    }
+    if (actTop + ACT > vh - GAP) {
+      // Not enough room below: stack actions above the reactions.
+      actTop = Math.max(GAP, emojiTop - ACT - GAP);
+      if (emojiTop + EMOJI > vh - GAP) emojiTop = vh - EMOJI - GAP;
+    }
+    setPos({ emojiTop, actTop, x: mine ? Math.max(GAP, vw - r.right) : Math.max(GAP, r.left), rect: r, html: anchor.outerHTML });
+  }, [anchor, mine, actions.length]);
+
+  if (!pos) return null;
+  const side = mine ? { right: pos.x } : { left: pos.x };
+  // Rendered at page level (a parent's animation would otherwise trap "fixed" inside the row).
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[65] bg-black/45 transition-opacity"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {/* The message itself, lit up above the dimmed chat */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute"
+        style={{ top: pos.rect.top, left: pos.rect.left, width: pos.rect.width }}
+        dangerouslySetInnerHTML={{ __html: pos.html }}
+      />
+      <div
+        className="animate-pop absolute flex items-center gap-0.5 rounded-full bg-zinc-900/95 p-1 shadow-2xl ring-1 ring-white/10"
+        style={{ top: pos.emojiTop, ...side }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {EMOJIS.map((e) => (
+          <button
+            key={e}
+            onClick={() => onReact(e)}
+            className={`flex size-10 items-center justify-center rounded-full text-[22px] transition hover:scale-125 active:scale-95 ${myReaction === e ? "bg-white/15" : ""}`}
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+      <div
+        className="animate-pop absolute w-48 overflow-hidden rounded-2xl bg-zinc-900/95 py-1 shadow-2xl ring-1 ring-white/10"
+        style={{ top: pos.actTop, ...side }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {actions.map((a) => (
+          <button
+            key={a.label}
+            onClick={a.run}
+            aria-label={a.label}
+            className={`flex h-11 w-full items-center justify-between px-4 text-[15px] hover:bg-white/8 active:bg-white/12 ${a.danger ? "text-rose-300" : "text-cream/90"}`}
+          >
+            {a.label}
+            <span className="text-base leading-none">{a.icon}</span>
+          </button>
+        ))}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** A YouTube link in a message → the song, with "Play it together". */
+function LinkCard({ videoId, mine, onPlay }: { videoId: string; mine: boolean; onPlay: (t: Track) => void }) {
+  const [track, setTrack] = useState<Track | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/oembed?id=${videoId}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((j) => alive && setTrack(j.items?.[0] ?? null))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [videoId]);
+  if (failed) return null;
+  return (
+    <span className={`mt-2 block w-60 max-w-full overflow-hidden rounded-2xl whitespace-normal ${mine ? "bg-ink/10" : "bg-black/25"}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`} alt="" className="aspect-video w-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
+      <span className="block px-3 pt-2 pb-2.5">
+        <span className="line-clamp-2 block text-[13.5px] leading-snug font-semibold">{track?.title ?? "YouTube"}</span>
+        {track && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onPlay(track)}
+            className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-semibold active:scale-[0.98] ${
+              mine ? "bg-ink/15 text-ink" : "bg-white/12 text-cream"
+            }`}
+          >
+            ▶ Play it together
+          </button>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/** Poll card: tap a choice to vote (tap again to take it back). Live on both phones. */
+function PollCard({ question, options, mine, poll }: { question: string; options: string[]; mine: boolean; poll: PollInfo }) {
+  const total = poll.votes.length;
+  const myChoice = poll.votes.find((v) => v.user_id === poll.meId)?.choice;
+  return (
+    <span className="block w-64 max-w-full whitespace-normal">
+      <span className={`mb-1 block text-[11.5px] font-semibold tracking-wide uppercase ${mine ? "text-ink/60" : "text-rose-200/90"}`}>📊 Poll</span>
+      <span className="block text-[15.5px] leading-snug font-semibold">{question}</span>
+      <span className="mt-2.5 block space-y-1.5">
+        {options.map((o, i) => {
+          const voters = poll.votes.filter((v) => v.choice === i);
+          const pct = total ? Math.round((voters.length / total) * 100) : 0;
+          const chosen = myChoice === i;
+          return (
+            <button
+              key={i}
+              type="button"
+              disabled={!poll.onVote}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => poll.onVote?.(i)}
+              aria-pressed={chosen}
+              aria-label={`Vote ${o}`}
+              className={`relative block w-full overflow-hidden rounded-xl px-3 py-2 text-left text-[14px] ring-1 transition active:scale-[0.98] ${
+                mine ? "ring-ink/15" : "ring-white/10"
+              } ${chosen ? (mine ? "ring-2 ring-ink/50" : "ring-2 ring-rose-200/70") : ""}`}
+            >
+              <span className={`absolute inset-y-0 left-0 transition-[width] duration-500 ${mine ? "bg-ink/12" : "bg-white/12"}`} style={{ width: `${pct}%` }} />
+              <span className="relative flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  {chosen ? "✓ " : ""}
+                  {o}
+                </span>
+                <span className="flex shrink-0 items-center gap-1 text-[12px] opacity-70">
+                  {voters.map((v) => (
+                    <span key={v.user_id} title={poll.nameOf(v.user_id)}>
+                      {v.user_id === poll.meId ? "You" : poll.nameOf(v.user_id)}
+                    </span>
+                  ))}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </span>
+      <span className={`mt-1.5 block text-[11px] ${mine ? "text-ink/55" : "text-cream/45"}`}>
+        {total === 0 ? "Tap to vote" : total === 1 ? "1 vote · waiting for the other" : "Both voted"}
+      </span>
+    </span>
   );
 }

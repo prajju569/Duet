@@ -41,7 +41,7 @@ export default async function RoomPage({
 
   // Everything the room needs, fetched at once so the page arrives already filled in.
   const [{ data: rows }, { data: latest }, { data: queue }, { data: playback }, { data: favourites }, schemaVersion] = await Promise.all([
-    supabase.from("room_members").select("user_id, last_read_at").eq("room_id", room.id),
+    supabase.from("room_members").select("*").eq("room_id", room.id), // * = works before & after newer SQL
     supabase.from("messages").select("*").eq("room_id", room.id).order("created_at", { ascending: false }).limit(PAGE_SIZE),
     supabase.from("queue_items").select("*").eq("room_id", room.id).eq("status", "queued").order("created_at"),
     supabase.from("playback_state").select("*").eq("room_id", room.id).maybeSingle(),
@@ -61,6 +61,8 @@ export default async function RoomPage({
   const members: Member[] = (rows ?? []).map((r) => ({
     userId: r.user_id,
     lastReadAt: r.last_read_at,
+    lastSeenAt: r.last_seen_at ?? null,
+    muted: !!r.muted,
     name: profiles?.find((p) => p.id === r.user_id)?.display_name ?? "Someone",
   }));
 
@@ -75,10 +77,12 @@ export default async function RoomPage({
         listenedSeconds: Number(room.listened_seconds ?? 0),
         theme: room.theme ?? null,
         scheduled: room.scheduled ?? null,
+        countdown: room.countdown ?? null,
+        pinnedMessage: room.pinned_message ?? null,
       }}
       me={{ id: user.id, name: profile.display_name, username: profile.username ?? null }}
       openInvite={invite === "1" && members.length < 2}
-      features={{ v2: schemaVersion >= 2 }}
+      features={{ v2: schemaVersion >= 2, v4: schemaVersion >= 4 }}
       initialMembers={members}
       initial={{
         messages,
