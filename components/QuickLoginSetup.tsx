@@ -2,20 +2,25 @@
 
 import { useState } from "react";
 import { PinInput } from "@/components/ui/PinInput";
+import { ID_NAME_MSG, idLooksLikeName } from "@/lib/duetId";
 
 /** Pick a Duet ID + 4-digit PIN, so next time logging in takes two seconds. */
 export function QuickLoginSetup({
-  suggested,
+  displayName,
   existingUsername,
+  changing = !!existingUsername,
   onDone,
   onSkip,
 }: {
-  suggested: string;
+  /** Your public name — the Duet ID must not match it. */
+  displayName: string | null;
   existingUsername: string | null;
+  /** Already have a Duet ID (maybe blanked out because it has to change). */
+  changing?: boolean;
   onDone: (username: string) => void;
   onSkip?: () => void;
 }) {
-  const [username, setUsername] = useState(existingUsername ?? suggested);
+  const [username, setUsername] = useState(existingUsername ?? "");
   const [pin, setPin] = useState("");
   const [confirm, setConfirm] = useState("");
   const [step, setStep] = useState<"pick" | "confirm">("pick");
@@ -51,11 +56,12 @@ export function QuickLoginSetup({
 
   return (
     <div className="animate-rise mt-8 rounded-3xl bg-white/6 p-5 ring-1 ring-white/10">
-      <p className="font-display text-xl italic">{existingUsername ? "Change your PIN" : "Make logging in instant"}</p>
+      <p className="font-display text-xl italic">{changing ? "Change your Duet ID or PIN" : "Make logging in instant"}</p>
       <p className="mt-1 text-sm text-cream/60">
-        {existingUsername
-          ? "Pick a new 4-digit PIN. Your Duet ID can change too."
-          : "Pick a Duet ID and a 4-digit PIN. Next time — on any phone — that's all you need. No emails."}
+        {changing
+          ? "Pick a secret Duet ID (not your name) and a 4-digit PIN."
+          : "Pick a secret Duet ID and a 4-digit PIN. Next time — on any phone — that's all you need. No emails."}
+        <span className="mt-1 block text-xs text-cream/45">Only you see your Duet ID. Don't use your name — everyone sees that.</span>
       </p>
 
       <label className="mt-5 block text-xs tracking-wide text-cream/50 uppercase">Duet ID</label>
@@ -66,7 +72,7 @@ export function QuickLoginSetup({
         autoCorrect="off"
         spellCheck={false}
         autoComplete="username"
-        placeholder="e.g. prajwal"
+        placeholder="e.g. moonrider.42"
         className="mt-1.5 h-12 w-full rounded-2xl bg-white/8 px-4 text-base ring-1 ring-white/10 placeholder:text-cream/35 focus:ring-white/30 focus:outline-none"
       />
 
@@ -81,6 +87,10 @@ export function QuickLoginSetup({
             onChange={setPin}
             onComplete={() => {
               if (username.length < 3) return setMsg("Duet ID needs at least 3 characters.");
+              if (idLooksLikeName(username, displayName)) {
+                setPin("");
+                return setMsg(ID_NAME_MSG);
+              }
               setMsg(null);
               setStep("confirm");
             }}
@@ -96,7 +106,7 @@ export function QuickLoginSetup({
 
       {onSkip && (
         <button onClick={onSkip} className="mt-3 text-sm text-cream/50 underline underline-offset-2">
-          {existingUsername ? "Cancel" : "Skip for now"}
+          {changing ? "Cancel" : "Skip for now"}
         </button>
       )}
     </div>

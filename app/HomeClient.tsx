@@ -7,6 +7,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { QuickLoginSetup } from "@/components/QuickLoginSetup";
 import { RoomsList, type HomeRoom } from "@/components/RoomsList";
+import { ID_NAME_MSG, idLooksLikeName } from "@/lib/duetId";
 
 type Room = { id: string; code: string; name: string };
 
@@ -44,6 +45,8 @@ export function HomeClient({
       if (!username && !next && localStorage.getItem("duet:pin-skipped") === "1") setPinOpen(false);
     } catch {}
   }, [username, next]);
+  const [showId, setShowId] = useState(false); // Duet ID stays hidden on screen unless you tap
+  const idMatchesName = !!myUsername && idLooksLikeName(myUsername, displayName);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(error ? (ERRORS[error] ?? error) : null);
@@ -52,6 +55,8 @@ export function HomeClient({
     e.preventDefault();
     const n = name.trim();
     if (!n) return;
+    if (myUsername && idLooksLikeName(myUsername, n)) return setMsg(ID_NAME_MSG);
+    setMsg(null);
     setBusy(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from("profiles").update({ display_name: n }).eq("id", user!.id);
@@ -122,17 +127,34 @@ export function HomeClient({
                 <>
                   {" · "}
                   <button onClick={() => setPinOpen(true)} className="text-cream/40 underline underline-offset-2">
-                    {myUsername ? "change PIN" : "set up PIN"}
+                    {myUsername ? "change ID / PIN" : "set up PIN"}
                   </button>
                 </>
               )}
             </p>
-            {myUsername && !pinOpen && <p className="mt-1 text-xs text-cream/35">Your Duet ID: <b>{myUsername}</b> + your PIN</p>}
+            {myUsername && !pinOpen && (
+              <p className="mt-1 text-xs text-cream/35">
+                Your Duet ID (only you see this):{" "}
+                <button onClick={() => setShowId((v) => !v)} className="font-semibold text-cream/55" aria-label={showId ? "Hide Duet ID" : "Show Duet ID"}>
+                  {showId ? myUsername : "••••••"} {showId ? "🙈" : "👁"}
+                </button>
+              </p>
+            )}
+            {idMatchesName && !pinOpen && (
+              <div className="animate-rise mt-4 rounded-2xl bg-amber-400/10 p-4 text-sm ring-1 ring-amber-300/25">
+                <b>🔐 Your Duet ID is the same as your name.</b>
+                <p className="mt-1 text-cream/65">Everyone sees your name — so they'd only need to guess your 4-digit PIN. Pick a secret Duet ID.</p>
+                <button onClick={() => setPinOpen(true)} className="mt-3 rounded-full bg-cream px-4 py-2 font-semibold text-ink">
+                  Change Duet ID
+                </button>
+              </div>
+            )}
 
             {pinOpen && (
               <QuickLoginSetup
-                suggested={(displayName ?? "").toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 20)}
-                existingUsername={myUsername}
+                displayName={name.trim() || displayName}
+                existingUsername={idMatchesName ? null : myUsername}
+                changing={!!myUsername}
                 onDone={(u) => {
                   setMyUsername(u);
                   setPinOpen(false);
@@ -189,9 +211,8 @@ export function HomeClient({
         {msg && <p className="mt-5 text-sm text-rose-300">{msg}</p>}
         {!editingName && <InstallPrompt />}
         <p className="mt-12 text-center text-xs text-cream/35">
-          Signed in as {myUsername ? <b>@{myUsername}</b> : null}
-          {myUsername && !email.endsWith("@guests.duet.local") ? " · " : ""}
-          {email.endsWith("@guests.duet.local") ? "" : email}
+          Signed in{myUsername && showId ? <> as <b>@{myUsername}</b></> : null}
+          {email.endsWith("@guests.duet.local") ? "" : ` · ${email}`}
         </p>
       </div>
     </div>

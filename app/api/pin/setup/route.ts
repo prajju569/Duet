@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { ID_NAME_MSG, idLooksLikeName } from "@/lib/duetId";
 import { isWeakPin, normalizeUsername, pinConfigured, pinToSecret, PIN_RE, USERNAME_RE } from "@/lib/pin";
 
 // Set (or change) your Duet ID + PIN. You must already be signed in.
@@ -20,6 +21,9 @@ export async function POST(req: NextRequest) {
   if (isWeakPin(pin)) {
     return NextResponse.json({ error: "That PIN is too easy to guess — pick another." }, { status: 400 });
   }
+
+  const { data: me } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+  if (idLooksLikeName(username, me?.display_name)) return NextResponse.json({ error: ID_NAME_MSG }, { status: 400 });
 
   const { data: free } = await supabase.rpc("username_available", { p_username: username });
   if (free === false) return NextResponse.json({ error: "That Duet ID is taken." }, { status: 409 });

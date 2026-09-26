@@ -56,14 +56,14 @@ export function InviteJoin({ token, from, signedInAs }: { token: string; from: s
             autoFocus
             value={duetId}
             onChange={(e) => setDuetId(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 20))}
-            placeholder="e.g. ananya_22"
+            placeholder="e.g. moonrider.42"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
             autoComplete="username"
             className="mt-1.5 h-13 w-full rounded-2xl bg-white/8 px-4 text-base ring-1 ring-white/10 placeholder:text-cream/35 focus:ring-white/30 focus:outline-none"
           />
-          <p className="mt-2 text-xs text-cream/40">New here? Pick any ID. Already on Duet? Use your existing one.</p>
+          <p className="mt-2 text-xs text-cream/40">New here? Pick a secret ID — not your name (that is public). Already on Duet? Use your existing one.</p>
           <button
             disabled={pending || duetId.length < 3}
             className="mt-5 h-14 w-full rounded-2xl bg-cream text-lg font-semibold text-ink transition active:scale-[0.98] disabled:opacity-40"

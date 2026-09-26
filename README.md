@@ -28,6 +28,8 @@ You'll create three free accounts: **Supabase** (database and login), **Google C
    - **Project URL**, which looks like `https://abcd1234.supabase.co`
    - **anon public** key (it may be called the **publishable** key), a long string
 
+> **Duet v3 (private Duet IDs + richer rooms list):** after deploying, run `supabase/migrations/20261001000000_privacy_rooms.sql`. It hides everyone's Duet ID from other people (only you can see yours) and makes the rooms list show photos, voice notes and 💌 dedications properly.
+>
 > **Duet v2 (stickers, photos, voice notes, lyrics, Our Songs, history, autoplay, themes, scheduled songs, notifications…):** run `supabase/migrations/20260930000000_duet_v2.sql`. Until it's run, those features simply stay hidden. For notifications also add `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` in Vercel (see `.env.example`) and redeploy.
 >
 > **Rooms list + rename:** run `supabase/migrations/20260929000000_rooms_home.sql`.

@@ -1185,7 +1185,7 @@ export function RoomClient({ room, me, initialMembers, initial, openInvite = fal
         <div className="vv-fixed z-[55] flex items-end justify-center bg-black/60 px-3 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-sm sm:items-center" onClick={() => setPinSheet(false)}>
           <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <QuickLoginSetup
-              suggested={me.name.toLowerCase().replace(/[^a-z0-9_.]/g, "").slice(0, 20)}
+              displayName={me.name}
               existingUsername={null}
               onDone={(u) => {
                 setUsername(u);

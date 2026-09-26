@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ID_NAME_MSG, idLooksLikeName } from "@/lib/duetId";
 import { isWeakPin, normalizeUsername, pinConfigured, pinToSecret, PIN_RE, USERNAME_RE, waitText } from "@/lib/pin";
 
 export type ActionResult = { error: string | null; exists?: boolean };
@@ -40,6 +41,10 @@ export async function checkDuetId(token: string, rawId: string): Promise<ActionR
   const { data } = await supabase.rpc("invite_username_exists", { p_token: token, p_username: id });
   const r = data as { ok: boolean; exists?: boolean } | null;
   if (!r?.ok) return { error: INVITE_ERRORS.INVITE_INVALID };
+  if (!r.exists) {
+    const { inviteeName } = await inviteIsOpen(token);
+    if (idLooksLikeName(id, inviteeName)) return { error: ID_NAME_MSG };
+  }
   return { error: null, exists: !!r.exists };
 }
 
@@ -53,6 +58,7 @@ export async function joinAsNew(token: string, rawId: string, pin: string): Prom
 
   const { supabase, ok, status, inviteeName } = await inviteIsOpen(token);
   if (!ok) return { error: INVITE_ERRORS[`INVITE_${status.toUpperCase()}`] ?? INVITE_ERRORS.INVITE_INVALID };
+  if (idLooksLikeName(id, inviteeName)) return { error: ID_NAME_MSG };
 
   const admin = createAdminClient();
   if (!admin) return { error: "Invites aren't set up on the server yet (missing service key)." };

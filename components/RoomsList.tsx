@@ -17,7 +17,37 @@ export type HomeRoom = {
   last_user: string | null;
   last_at: string | null;
   unread: number;
+  // v3 database
+  last_meta?: { miss?: boolean; title?: string } | null;
+  last_deleted?: boolean;
+  dedication?: { by: string; at: string; title: string | null; videoId: string | null; note: string | null } | null;
 };
+
+/** What the last message was, WhatsApp-style ("📷 Photo", "💌 Dedicated Kajra Re"…). */
+function describe(r: HomeRoom, meId: string) {
+  const mine = r.last_user === meId;
+  const who = mine ? "You" : firstName(r.partner_name);
+  const body = r.last_body ?? "";
+  if (r.last_deleted) return `${mine ? "You: " : ""}🚫 Message deleted`;
+  switch (r.last_kind) {
+    case "system":
+      return body;
+    case "image":
+      return `${mine ? "You: " : ""}📷 Photo`;
+    case "voice":
+      return `${mine ? "You: " : ""}🎤 Voice note`;
+    case "sticker":
+      return r.last_meta?.miss || (body === "🥹" && r.last_meta === undefined)
+        ? `🥹 ${mine ? "You miss them" : `${who} misses you`}`
+        : `${mine ? "You: " : ""}${body} Sticker`;
+    case "dedication":
+      return `💌 ${who} dedicated ${body.replace(/^💌\s*/, "")}${mine ? "" : " to you"}`;
+    case "moment":
+      return `${mine ? "You" : who} shared a moment · ${body.replace(/^🎵\s*/, "")}`;
+    default:
+      return `${mine ? "You: " : ""}${body}`;
+  }
+}
 
 function when(iso: string | null) {
   if (!iso) return "";
@@ -54,9 +84,7 @@ export function RoomsList({ rooms: initial, meId }: { rooms: HomeRoom[]; meId: s
       <ul className="mt-3 space-y-2">
         {rooms.map((r) => {
           const preview = r.last_body
-            ? r.last_kind === "system"
-              ? r.last_body
-              : `${r.last_user === meId ? "You: " : ""}${r.last_body}`
+            ? describe(r, meId)
             : r.partner_name
               ? "Say hi 👋"
               : "Waiting for your person — tap to invite";
@@ -89,6 +117,16 @@ export function RoomsList({ rooms: initial, meId }: { rooms: HomeRoom[]; meId: s
                       </span>
                     )}
                   </div>
+                  {r.dedication?.title && r.last_kind !== "dedication" && (
+                    <div className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded-full bg-rose-300/12 py-1 pr-3 pl-1.5 text-[12px] text-rose-100 ring-1 ring-rose-200/15">
+                      <span aria-hidden>💌</span>
+                      <span className="truncate">
+                        {r.dedication.by === meId ? "You dedicated" : `${firstName(r.partner_name)} dedicated`} <b>{r.dedication.title}</b>
+                        {r.dedication.by === meId ? "" : " to you"}
+                        {r.dedication.note ? ` · “${r.dedication.note}”` : ""}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </Link>
               <button
